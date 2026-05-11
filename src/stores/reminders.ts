@@ -30,4 +30,4 @@ export const useReminders = create<RemindersState>((set, get) => ({
   forClient: (clientId) => get().reminders.filter((r) => r.clientId === clientId),
 }));
 
-registerServerStore("midas:v1:reminders", useReminders, (state) => ({ reminders: state.reminders }));
+registerServerStore("midas:v1:reminders", useReminders, (state) => ({ reminders: state.reminders }), { shared: true });

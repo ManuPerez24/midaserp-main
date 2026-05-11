@@ -8,6 +8,11 @@ export interface PriceHistoryEntry {
   currency: Currency;
 }
 
+export interface VolumePrice {
+  minQty: number;
+  price: number;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -22,6 +27,9 @@ export interface Product {
   supplier: string;
   website?: string;
   imageDataUrl?: string | null;
+  stock?: number;
+  minStock?: number;
+  volumePrices?: VolumePrice[];
   createdAt: string;
   priceHistory?: PriceHistoryEntry[];
 }
@@ -34,6 +42,14 @@ export function getProductCategories(p: Product): string[] {
 export interface KitItem {
   productId: string;
   quantity: number;
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  type: string;
+  dataUrl: string;
+  createdAt: string;
 }
 
 export interface Kit {
@@ -52,6 +68,7 @@ export interface Client {
   phone: string;
   address: string;
   createdAt: string;
+  attachments?: Attachment[];
 }
 
 export interface QuoteLine {
@@ -65,6 +82,8 @@ export interface QuoteLine {
   currency: Currency;
   quantity: number;
   discountPercent?: number;
+  poStatus?: "Pendiente" | "Pedida" | "Recibida";
+  poReceivedQty?: number;
 }
 
 export type QuoteEventKind =
@@ -97,6 +116,7 @@ export interface Quote {
   events?: QuoteEvent[];
   validUntil?: string | null;
   globalDiscountPercent?: number;
+  attachments?: Attachment[];
 }
 
 export interface QuoteTemplate {
@@ -144,6 +164,12 @@ export interface PdfSettings {
   pageSize?: "LETTER" | "A4";
   showQr?: boolean;
   paymentTerms?: string;
+  template?: "modern" | "minimalist" | "classic";
+  showPhotos?: boolean;
+  showSku?: boolean;
+  showDiscount?: boolean;
+  showNotes?: boolean;
+  layout?: string[];
 }
 
 export interface FolioSettings {
@@ -162,7 +188,12 @@ export type MenuIconName =
   | "Folder"
   | "Star"
   | "Tag"
-  | "Wrench";
+  | "Wrench"
+  | "Kanban"
+  | "ShoppingCart"
+  | "History"
+  | "ShieldCheck"
+  | "HardHat";
 
 export interface MenuItem {
   id: string; // route id like "dashboard", "inventario", etc.

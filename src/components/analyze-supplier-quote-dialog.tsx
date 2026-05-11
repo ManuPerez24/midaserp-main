@@ -22,9 +22,11 @@ import { analyzeSupplierQuote } from "@/util/analyze-supplier-quote.functions";
 import { useInventory } from "@/stores/inventory";
 import { useSettings } from "@/stores/settings";
 import { useSupplierQuotes } from "@/stores/supplier-quotes";
+import { logAction } from "@/stores/audit-log";
 import { matchExtractedItems, type MatchResult } from "@/lib/quote-extract";
 import { formatMoney } from "@/lib/utils";
 import type { ExtractedQuoteItem } from "@/lib/types";
+import { optimizeImage } from "@/lib/image-utils";
 
 interface Props {
   open: boolean;
@@ -209,12 +211,7 @@ export function AnalyzeSupplierQuoteDialog({
             toast.error(`No se pudo leer "${f.name}"`);
           }
         } else if (f.type.startsWith("image/")) {
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(String(r.result));
-            r.onerror = () => reject(r.error);
-            r.readAsDataURL(f);
-          });
+          const dataUrl = await optimizeImage(f, 1600, 1600, 0.85);
           newSources.push({
             name: f.name,
             kind: "image",
@@ -283,6 +280,19 @@ export function AnalyzeSupplierQuoteDialog({
     }
     setBusy(true);
     try {
+      const catalogContext = products
+        .map((p) => `- [${p.sku}] ${p.partNumber ? `(NP: ${p.partNumber}) ` : ""}${p.name}`)
+        .join("\n");
+
+      const semanticInstructions = `\n\nIMPORTANTE - EMPAREJAMIENTO SEMÁNTICO:
+A continuación tienes nuestro catálogo de inventario actual. Al extraer los productos del proveedor, compáralos semánticamente con este catálogo.
+Si un producto de la cotización es el mismo (aunque el proveedor use abreviaturas o distinto orden de palabras), DEBES devolver el 'name' y 'partNumber' exactos de nuestro catálogo para que el sistema haga match automáticamente.
+Si el producto es nuevo, usa los datos del documento del proveedor.
+REGLA ESTRICTA: Extrae el precio de costo tal cual viene en el documento. NO realices ningún auto-cálculo de precios ni márgenes de reventa.
+
+CATÁLOGO ACTUAL:
+${catalogContext}`;
+
       const allItems: ExtractedQuoteItem[] = [];
       const allSuppliers: string[] = [];
       if (isFile) {
@@ -291,10 +301,11 @@ export function AnalyzeSupplierQuoteDialog({
           const s = sources[idx];
           setProgress({ current: idx + 1, total, name: s.name });
           const supplierForSource = (s.supplier?.trim() || supplier).trim();
-          let userPromptWithCorrection = settings.ai?.userPrompt || undefined;
+          let userPromptWithCorrection = settings.ai?.userPrompt || "Extrae los productos de esta cotización de proveedor.";
           if (correction) {
             userPromptWithCorrection = `${userPromptWithCorrection}\n\nINSTRUCCIÓN DE CORRECCIÓN DEL USUARIO:\n${correction}`;
           }
+          userPromptWithCorrection += semanticInstructions;
           const res = await analyze({
             data: {
               supplierHint: supplierForSource,
@@ -319,10 +330,11 @@ export function AnalyzeSupplierQuoteDialog({
         }
       } else {
         setProgress({ current: 1, total: 1, name: "texto" });
-        let userPromptWithCorrection = settings.ai?.userPrompt || undefined;
+        let userPromptWithCorrection = settings.ai?.userPrompt || "Extrae los productos de esta cotización de proveedor.";
         if (correction) {
           userPromptWithCorrection = `${userPromptWithCorrection}\n\nINSTRUCCIÓN DE CORRECCIÓN DEL USUARIO:\n${correction}`;
         }
+        userPromptWithCorrection += semanticInstructions;
         const res = await analyze({
           data: {
             supplierHint: supplier,
@@ -388,6 +400,7 @@ export function AnalyzeSupplierQuoteDialog({
           items: allItems,
         });
         setSavedId(saved.id);
+        logAction("supplier-quote:create", `Cotización de proveedor '${saved.supplier}' analizada, ${allItems.length} ítems.`);
       } else if (correction) {
         updateSQ(savedId, { items: allItems });
       }
@@ -475,6 +488,7 @@ export function AnalyzeSupplierQuoteDialog({
     toast.success(
       `Aplicado: ${updated} actualizados, ${created} nuevos${pendingCount > 0 ? ` · ${pendingCount} pendientes` : ""}`,
     );
+    logAction("supplier-quote:apply", `${created} productos creados, ${updated} actualizados desde cotización de proveedor.`);
     reset();
     onOpenChange(false);
   };
@@ -532,6 +546,9 @@ export function AnalyzeSupplierQuoteDialog({
                   list="supplier-options"
                   value={supplier}
                   onChange={(e) => setSupplier(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value.trim()) useSettings.getState().addSupplier?.(e.target.value.trim());
+                  }}
                   placeholder="Nombre del proveedor"
                 />
                 <datalist id="supplier-options">
@@ -608,6 +625,9 @@ export function AnalyzeSupplierQuoteDialog({
                               prev.map((x, k) => (k === i ? { ...x, supplier: e.target.value } : x)),
                             )
                           }
+                          onBlur={(e) => {
+                            if (e.target.value.trim()) useSettings.getState().addSupplier?.(e.target.value.trim());
+                          }}
                           className="h-7 w-44 text-xs"
                           disabled={busy}
                         />
@@ -688,6 +708,7 @@ export function AnalyzeSupplierQuoteDialog({
                         setCategories((curr) =>
                           curr.map((arr) => (arr.includes(v) ? arr : [...arr, v])),
                         );
+                        useSettings.getState().addCategory?.(v);
                         (e.target as HTMLInputElement).value = "";
                       }
                     }
@@ -706,6 +727,11 @@ export function AnalyzeSupplierQuoteDialog({
                 <datalist id="item-cat-options">
                   {sortedCategoryOptions.map((c) => (
                     <option key={c} value={c} />
+                  ))}
+                </datalist>
+                <datalist id="unit-options">
+                  {settings.units.map((u) => (
+                    <option key={u} value={u} />
                   ))}
                 </datalist>
                 <table className="w-full text-sm">
@@ -733,6 +759,7 @@ export function AnalyzeSupplierQuoteDialog({
                       <th className="p-2 text-left">Nº parte / Nombre</th>
                       <th className="p-2 text-right">Precio detectado</th>
                       <th className="p-2 text-right">Precio actual</th>
+                      <th className="p-2 text-left">Unidad</th>
                       <th className="p-2 text-left">Estado</th>
                       <th className="p-2 text-left">Categoría</th>
                       <th className="p-2 text-center">Crear nuevo</th>
@@ -783,6 +810,18 @@ export function AnalyzeSupplierQuoteDialog({
                           </td>
                           <td className="p-2 text-right text-muted-foreground">
                             {m.match ? formatMoney(m.match.price, m.match.currency) : "—"}
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              list="unit-options"
+                              value={m.item.unit || ""}
+                              onChange={(e) => updateItem(i, { unit: e.target.value })}
+                              onBlur={(e) => {
+                                if (e.target.value.trim()) useSettings.getState().addUnit?.(e.target.value.trim().toUpperCase());
+                              }}
+                              placeholder="PIEZA"
+                              className="h-7 w-20 text-xs uppercase"
+                            />
                           </td>
                           <td className="p-2">
                             {done ? (
@@ -861,6 +900,7 @@ export function AnalyzeSupplierQuoteDialog({
                                         if (!next[i].includes(v)) next[i] = [...next[i], v];
                                         return next;
                                       });
+                                      useSettings.getState().addCategory?.(v);
                                       setCatDrafts((curr) => {
                                         const next = curr.slice();
                                         while (next.length <= i) next.push("");
@@ -878,6 +918,7 @@ export function AnalyzeSupplierQuoteDialog({
                                       if (!next[i].includes(v)) next[i] = [...next[i], v];
                                       return next;
                                     });
+                                    useSettings.getState().addCategory?.(v);
                                     setCatDrafts((curr) => {
                                       const next = curr.slice();
                                       while (next.length <= i) next.push("");

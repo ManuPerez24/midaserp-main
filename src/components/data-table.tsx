@@ -39,6 +39,8 @@ interface Props<T> {
   emptyState?: ReactNode;
   toolbar?: ReactNode;
   rowKey: (row: T) => string;
+  onRowClick?: (e: React.MouseEvent<HTMLTableRowElement>, row: T) => void;
+  onRowContextMenu?: (e: React.MouseEvent<HTMLTableRowElement>, row: T) => void;
 }
 
 export function DataTable<T>({
@@ -50,6 +52,8 @@ export function DataTable<T>({
   emptyState,
   toolbar,
   rowKey,
+  onRowClick,
+  onRowContextMenu,
 }: Props<T>) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -166,7 +170,12 @@ export function DataTable<T>({
                 </TableRow>
               ) : (
                 paginated.map((row) => (
-                  <TableRow key={rowKey(row)}>
+                  <TableRow
+                    key={rowKey(row)}
+                    onClick={onRowClick ? (e) => onRowClick(e, row) : undefined}
+                    onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(e, row) : undefined}
+                    className={onRowClick ? "cursor-pointer" : undefined}
+                  >
                     {columns.map((c) => (
                       <TableCell key={c.key} className={cn(c.className)}>
                         {c.cell(row)}

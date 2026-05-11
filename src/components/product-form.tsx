@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSettings } from "@/stores/settings";
-import type { Product, Currency } from "@/lib/types";
+import type { Product, Currency, VolumePrice } from "@/lib/types";
+import { optimizeImage } from "@/lib/image-utils";
 
 interface Props {
   initial?: Partial<Product>;
@@ -30,8 +31,13 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
   const [price, setPrice] = useState<string>(initial?.price?.toString() ?? "0");
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "MXN");
   const [unit, setUnit] = useState(initial?.unit ?? "PIEZA");
+  const [stock, setStock] = useState<string>(initial?.stock?.toString() ?? "");
+  const [minStock, setMinStock] = useState<string>(initial?.minStock?.toString() ?? "");
+  const [volumePrices, setVolumePrices] = useState<VolumePrice[]>(initial?.volumePrices ?? []);
   const [newUnit, setNewUnit] = useState("");
   const [showNewUnit, setShowNewUnit] = useState(false);
+  const [newSupplier, setNewSupplier] = useState("");
+  const [showNewSupplier, setShowNewSupplier] = useState(false);
 
   const [categories, setCategories] = useState<string[]>(
     initial?.categories && initial.categories.length > 0
@@ -46,14 +52,14 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(initial?.imageDataUrl ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleImage = (file: File) => {
-    if (file.size > 1024 * 1024) {
-      toast.error("La imagen debe pesar menos de 1 MB");
-      return;
+  const handleImage = async (file: File) => {
+    try {
+      const optimizedUrl = await optimizeImage(file, 800, 800, 0.8);
+      setImageDataUrl(optimizedUrl);
+    } catch (e) {
+      console.error(e);
+      toast.error("No se pudo procesar la imagen");
     }
-    const reader = new FileReader();
-    reader.onload = () => setImageDataUrl(String(reader.result));
-    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -68,6 +74,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
     if (categories.includes(v)) return;
     setCategories([...categories, v]);
     setCatInput("");
+    useSettings.getState().addCategory?.(v);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -83,12 +90,15 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
       price: parseFloat(price) || 0,
       currency,
       unit: unit.trim().toUpperCase(),
+      stock: stock === "" ? undefined : (parseFloat(stock) || 0),
+      minStock: minStock === "" ? undefined : (parseFloat(minStock) || 0),
+      volumePrices: volumePrices.filter((v) => v.minQty > 1 && v.price > 0),
       category: finalCats[0] ?? "",
       categories: finalCats,
       supplier: supplier.trim(),
       website: website.trim(),
       imageDataUrl,
-    });
+    } as any);
   };
 
   return (
@@ -125,7 +135,7 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">Máximo 1 MB. PNG o JPG.</p>
+            <p className="text-xs text-muted-foreground">La imagen se redimensionará y optimizará automáticamente.</p>
           </div>
         </div>
       </div>
@@ -181,6 +191,29 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
         </Select>
       </div>
 
+      {(settings as any).inventory?.enableStock && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Existencias (Stock)</Label>
+            <Input
+              type="number"
+              value={stock}
+              onChange={(e) => setStock(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Stock mínimo (Alertas)</Label>
+            <Input
+              type="number"
+              value={minStock}
+              onChange={(e) => setMinStock(e.target.value)}
+              placeholder="Opcional"
+            />
+          </div>
+        </>
+      )}
+
       <div className="space-y-1.5">
         <Label>Unidad</Label>
         {!showNewUnit ? (
@@ -224,6 +257,8 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
                   setUnit(v);
                   setShowNewUnit(false);
                   setNewUnit("");
+                } else {
+                  setShowNewUnit(false);
                 }
               }}
             >
@@ -281,17 +316,100 @@ export function ProductForm({ initial, onSubmit, submitLabel = "Guardar producto
 
       <div className="space-y-1.5 sm:col-span-2">
         <Label>Proveedor</Label>
-        <Input
-          value={supplier}
-          onChange={(e) => setSupplier(e.target.value)}
-          list="sup-list"
-          placeholder="Sin proveedor"
-        />
-        <datalist id="sup-list">
-          {settings.suppliers.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
+        {!showNewSupplier ? (
+          <div className="flex gap-2">
+            <Select value={supplier || "none"} onValueChange={(v) => setSupplier(v === "none" ? "" : v)}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Sin proveedor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin proveedor</SelectItem>
+                {settings.suppliers.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setShowNewSupplier(true)}
+              title="Nuevo proveedor"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Input
+              value={newSupplier}
+              onChange={(e) => setNewSupplier(e.target.value)}
+              placeholder="Nombre del proveedor"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const v = newSupplier.trim();
+                if (v) {
+                  useSettings.getState().addSupplier?.(v);
+                  setSupplier(v);
+                  setShowNewSupplier(false);
+                  setNewSupplier("");
+                } else {
+                  setShowNewSupplier(false);
+                }
+              }}
+            >
+              Usar
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="sm:col-span-2 space-y-1.5 rounded-lg border p-4 bg-muted/20">
+        <Label>Precios por volumen (Mayoreo)</Label>
+        <p className="text-xs text-muted-foreground mb-3">
+          Configura descuentos automáticos al cotizar cantidades mayores.
+        </p>
+        {volumePrices.map((vp, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-sm">A partir de</span>
+            <Input
+              type="number"
+              min="2"
+              value={vp.minQty}
+              onChange={(e) => {
+                const next = [...volumePrices];
+                next[i].minQty = parseInt(e.target.value) || 2;
+                setVolumePrices(next);
+              }}
+              className="w-24 h-8"
+            />
+            <span className="text-sm">{unit.toLowerCase()}(s) a</span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={vp.price}
+              onChange={(e) => {
+                const next = [...volumePrices];
+                next[i].price = parseFloat(e.target.value) || 0;
+                setVolumePrices(next);
+              }}
+              className="w-28 h-8"
+            />
+            <span className="text-sm">c/u</span>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive ml-auto" onClick={() => setVolumePrices(volumePrices.filter((_, idx) => idx !== i))}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setVolumePrices([...volumePrices, { minQty: 2, price: 0 }])}>
+          <Plus className="mr-2 h-4 w-4" /> Agregar escalón de precio
+        </Button>
       </div>
 
       <div className="space-y-1.5 sm:col-span-2">

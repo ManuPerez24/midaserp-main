@@ -11,13 +11,17 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 import { Route as RecordatoriosRouteImport } from './routes/recordatorios'
+import { Route as ProyectosRouteImport } from './routes/proyectos'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KitsRouteImport } from './routes/kits'
+import { Route as KanbanRouteImport } from './routes/kanban'
 import { Route as InventarioRouteImport } from './routes/inventario'
 import { Route as CotizacionesProveedoresRouteImport } from './routes/cotizaciones-proveedores'
 import { Route as CotizacionesRouteImport } from './routes/cotizaciones'
+import { Route as ComprasRouteImport } from './routes/compras'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as AyudaRouteImport } from './routes/ayuda'
+import { Route as AuditLogRouteImport } from './routes/audit-log'
 import { Route as AjustesRouteImport } from './routes/ajustes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CotizacionesIdRouteImport } from './routes/cotizaciones.$id'
@@ -33,6 +37,11 @@ const RecordatoriosRoute = RecordatoriosRouteImport.update({
   path: '/recordatorios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProyectosRoute = ProyectosRouteImport.update({
+  id: '/proyectos',
+  path: '/proyectos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -41,6 +50,11 @@ const LoginRoute = LoginRouteImport.update({
 const KitsRoute = KitsRouteImport.update({
   id: '/kits',
   path: '/kits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KanbanRoute = KanbanRouteImport.update({
+  id: '/kanban',
+  path: '/kanban',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InventarioRoute = InventarioRouteImport.update({
@@ -58,6 +72,11 @@ const CotizacionesRoute = CotizacionesRouteImport.update({
   path: '/cotizaciones',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComprasRoute = ComprasRouteImport.update({
+  id: '/compras',
+  path: '/compras',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
@@ -66,6 +85,11 @@ const ClientesRoute = ClientesRouteImport.update({
 const AyudaRoute = AyudaRouteImport.update({
   id: '/ayuda',
   path: '/ayuda',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditLogRoute = AuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AjustesRoute = AjustesRouteImport.update({
@@ -92,13 +116,17 @@ const CotizacionesIdPublicaRoute = CotizacionesIdPublicaRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ajustes': typeof AjustesRoute
+  '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
   '/clientes': typeof ClientesRoute
+  '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
   '/inventario': typeof InventarioRoute
+  '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
   '/cotizaciones/$id': typeof CotizacionesIdRouteWithChildren
@@ -107,13 +135,17 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ajustes': typeof AjustesRoute
+  '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
   '/clientes': typeof ClientesRoute
+  '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
   '/inventario': typeof InventarioRoute
+  '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
   '/cotizaciones/$id': typeof CotizacionesIdRouteWithChildren
@@ -123,13 +155,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ajustes': typeof AjustesRoute
+  '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
   '/clientes': typeof ClientesRoute
+  '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
   '/inventario': typeof InventarioRoute
+  '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
   '/cotizaciones/$id': typeof CotizacionesIdRouteWithChildren
@@ -140,13 +176,17 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ajustes'
+    | '/audit-log'
     | '/ayuda'
     | '/clientes'
+    | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
     | '/inventario'
+    | '/kanban'
     | '/kits'
     | '/login'
+    | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
     | '/cotizaciones/$id'
@@ -155,13 +195,17 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/ajustes'
+    | '/audit-log'
     | '/ayuda'
     | '/clientes'
+    | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
     | '/inventario'
+    | '/kanban'
     | '/kits'
     | '/login'
+    | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
     | '/cotizaciones/$id'
@@ -170,13 +214,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/ajustes'
+    | '/audit-log'
     | '/ayuda'
     | '/clientes'
+    | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
     | '/inventario'
+    | '/kanban'
     | '/kits'
     | '/login'
+    | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
     | '/cotizaciones/$id'
@@ -186,13 +234,17 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AjustesRoute: typeof AjustesRoute
+  AuditLogRoute: typeof AuditLogRoute
   AyudaRoute: typeof AyudaRoute
   ClientesRoute: typeof ClientesRoute
+  ComprasRoute: typeof ComprasRoute
   CotizacionesRoute: typeof CotizacionesRouteWithChildren
   CotizacionesProveedoresRoute: typeof CotizacionesProveedoresRoute
   InventarioRoute: typeof InventarioRoute
+  KanbanRoute: typeof KanbanRoute
   KitsRoute: typeof KitsRoute
   LoginRoute: typeof LoginRoute
+  ProyectosRoute: typeof ProyectosRoute
   RecordatoriosRoute: typeof RecordatoriosRoute
   UsuariosRoute: typeof UsuariosRoute
 }
@@ -213,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecordatoriosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/proyectos': {
+      id: '/proyectos'
+      path: '/proyectos'
+      fullPath: '/proyectos'
+      preLoaderRoute: typeof ProyectosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -225,6 +284,13 @@ declare module '@tanstack/react-router' {
       path: '/kits'
       fullPath: '/kits'
       preLoaderRoute: typeof KitsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kanban': {
+      id: '/kanban'
+      path: '/kanban'
+      fullPath: '/kanban'
+      preLoaderRoute: typeof KanbanRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inventario': {
@@ -248,6 +314,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CotizacionesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/compras': {
+      id: '/compras'
+      path: '/compras'
+      fullPath: '/compras'
+      preLoaderRoute: typeof ComprasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/clientes': {
       id: '/clientes'
       path: '/clientes'
@@ -260,6 +333,13 @@ declare module '@tanstack/react-router' {
       path: '/ayuda'
       fullPath: '/ayuda'
       preLoaderRoute: typeof AyudaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit-log': {
+      id: '/audit-log'
+      path: '/audit-log'
+      fullPath: '/audit-log'
+      preLoaderRoute: typeof AuditLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ajustes': {
@@ -320,13 +400,17 @@ const CotizacionesRouteWithChildren = CotizacionesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AjustesRoute: AjustesRoute,
+  AuditLogRoute: AuditLogRoute,
   AyudaRoute: AyudaRoute,
   ClientesRoute: ClientesRoute,
+  ComprasRoute: ComprasRoute,
   CotizacionesRoute: CotizacionesRouteWithChildren,
   CotizacionesProveedoresRoute: CotizacionesProveedoresRoute,
   InventarioRoute: InventarioRoute,
+  KanbanRoute: KanbanRoute,
   KitsRoute: KitsRoute,
   LoginRoute: LoginRoute,
+  ProyectosRoute: ProyectosRoute,
   RecordatoriosRoute: RecordatoriosRoute,
   UsuariosRoute: UsuariosRoute,
 }

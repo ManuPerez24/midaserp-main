@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, FileEdit } from "lucide-react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { Plus, Trash2, FileEdit, Sparkles, PlusCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -22,9 +21,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useQuotes } from "@/stores/quotes";
+import { useInventory } from "@/stores/inventory";
 import { useSettings } from "@/stores/settings";
 import { computeTotals, lineTotal } from "@/lib/quote-calc";
 import { formatMoney } from "@/lib/utils";
+import { useServerFn } from "@tanstack/react-start";
+import { suggestCrossSellingWithAi } from "@/util/chat.functions";
 import type { Quote, QuoteLine } from "@/lib/types";
 
 interface Props {
@@ -35,6 +37,7 @@ interface Props {
 
 export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
   const settings = useSettings((s) => s.settings);
+  const products = useInventory((s) => s.products);
   const liveQuote = useQuotes((s) => s.quotes.find((q) => q.id === quote.id)) ?? quote;
 
   const updateLineQty = useQuotes((s) => s.updateLineQty);
@@ -44,6 +47,7 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
   const removeLine = useQuotes((s) => s.removeLine);
   const addManualLine = useQuotes((s) => s.addManualLine);
   const setGlobalDiscount = useQuotes((s) => s.setGlobalDiscount);
+  const suggestCrossSelling = useServerFn(suggestCrossSellingWithAi);
 
   const defaultCurrency = liveQuote.lines[0]?.currency ?? settings.branding.defaultCurrency ?? "MXN";
   const createBlankLine = (): QuoteLine => ({
@@ -60,6 +64,8 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
 
   const [lines, setLines] = useState<QuoteLine[]>(liveQuote.lines);
   const [removed, setRemoved] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [globalDiscount, setGlobalDiscountLocal] = useState<number>(
     liveQuote.globalDiscountPercent ?? 0
   );
@@ -73,13 +79,58 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
   }, [open, liveQuote.id]);
 
   const patchLine = (productId: string, patch: Partial<QuoteLine>) => {
-    setLines((prev) => prev.map((l) => (l.productId === productId ? { ...l, ...patch } : l)));
+    setLines((prev) => prev.map((l) => {
+      if (l.productId !== productId) return l;
+      const nextLine = { ...l, ...patch };
+      if (patch.quantity !== undefined) {
+         const prod = products.find(p => p.id === productId);
+         if (prod?.volumePrices && prod.volumePrices.length > 0) {
+            const applicable = [...prod.volumePrices].sort((a,b) => b.minQty - a.minQty).find(v => nextLine.quantity >= v.minQty);
+            const newPrice = applicable ? applicable.price : prod.price;
+            if (newPrice !== nextLine.unitPrice) {
+               nextLine.unitPrice = newPrice;
+            }
+         }
+      }
+      return nextLine;
+    }));
   };
 
   const markRemoved = (productId: string) => {
     setRemoved((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
     setLines((prev) => prev.filter((l) => l.productId !== productId));
   };
+
+  const cartNamesStr = useMemo(() => JSON.stringify(lines.map(l => ({ name: l.name }))), [lines]);
+  const aiSettings = settings.ai;
+
+  useEffect(() => {
+    if (lines.length === 0) {
+      setSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingSuggestions(true);
+      const catalog = products.map(p => ({ id: p.id, name: p.name, category: p.category || "" }));
+      suggestCrossSelling({
+        data: {
+          cart: JSON.parse(cartNamesStr),
+          catalog,
+          provider: aiSettings?.provider,
+          apiKey: aiSettings?.apiKey,
+          model: aiSettings?.model,
+          baseUrl: aiSettings?.baseUrl,
+        }
+      }).then(res => {
+        if (res.ok && res.data?.recommendedIds) {
+          const recommended = res.data.recommendedIds.map((id: string) => products.find(p => p.id === id)).filter(Boolean);
+          setSuggestions(recommended);
+        }
+        setLoadingSuggestions(false);
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [cartNamesStr, products, aiSettings]);
 
   const draftQuote: Quote = { ...liveQuote, lines, globalDiscountPercent: globalDiscount };
   const totals = computeTotals(draftQuote, settings.issuer.ivaPercent);
@@ -120,8 +171,8 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl p-0 sm:max-w-6xl">
-        <DialogHeader className="border-b px-6 py-4">
+      <DialogContent className="flex max-h-[95vh] flex-col overflow-hidden max-w-6xl p-0 sm:max-w-6xl">
+        <DialogHeader className="border-b px-6 py-4 shrink-0">
           <DialogTitle className="flex items-center gap-2 font-mono">
             <FileEdit className="h-5 w-5" /> Editar contenido · {liveQuote.folio}
           </DialogTitle>
@@ -130,18 +181,61 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="border-b px-6 py-4">
+        <div className="border-b px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4 shrink-0 overflow-hidden min-w-0">
           <Button
             variant="outline"
             size="sm"
             type="button"
             onClick={() => setLines((prev) => [...prev, createBlankLine()])}
+            className="shrink-0"
           >
             <Plus className="mr-2 h-4 w-4" /> Agregar línea manual
           </Button>
+
+          {suggestions.length > 0 && (
+            <div className="flex-1 min-w-0 flex items-center gap-3 overflow-hidden rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-800 dark:text-amber-400">
+              <Sparkles className="h-4 w-4 shrink-0" />
+              <div className="flex-1 min-w-0 overflow-x-auto pb-0.5 scrollbar-thin">
+                <div className="flex w-max items-center gap-2">
+                  <span className="font-semibold whitespace-nowrap shrink-0 mr-2">Sugerencias IA:</span>
+                  {loadingSuggestions ? (
+                    <span className="flex items-center text-xs text-amber-600/70 whitespace-nowrap shrink-0">
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      Pensando...
+                    </span>
+                  ) : (
+                    suggestions.map((p) => (
+                    <Button
+                      key={p.id}
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs bg-background shrink-0 whitespace-nowrap hover:bg-background/80"
+                      onClick={() => {
+                        const existing = lines.find((l) => l.productId === p.id);
+                        if (existing) {
+                          patchLine(p.id, { quantity: existing.quantity + 1 });
+                        } else {
+                          setLines((prev) => [...prev, { productId: p.id, sku: p.sku, partNumber: p.partNumber, name: p.name, description: p.description, unit: p.unit, unitPrice: p.price, currency: p.currency, quantity: 1 }]);
+                        }
+                        toast.success(`Agregado: ${p.name}`);
+                      }}
+                    >
+                      <PlusCircle className="mr-1 h-3 w-3" /> {p.name}
+                    </Button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <ScrollArea className="h-[65vh] w-full">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto">
+          <datalist id="unit-options">
+            {settings.units.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
           <div className="p-4 sm:p-6">
             {lines.length === 0 ? (
               <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -183,8 +277,12 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
                       </TableCell>
                       <TableCell>
                         <Input
+                          list="unit-options"
                           value={l.unit}
                           onChange={(e) => patchLine(l.productId, { unit: e.target.value })}
+                          onBlur={(e) => {
+                            if (e.target.value.trim()) useSettings.getState().addUnit?.(e.target.value.trim().toUpperCase());
+                          }}
                         />
                       </TableCell>
                       <TableCell>
@@ -248,9 +346,9 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
               </Table>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        <div className="border-t bg-muted/30 px-6 py-4">
+        <div className="border-t bg-muted/30 px-6 py-4 shrink-0">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="flex items-end gap-3">
               <div className="space-y-1">
@@ -283,7 +381,7 @@ export function QuoteContentEditDialog({ quote, open, onOpenChange }: Props) {
           </div>
         </div>
 
-        <DialogFooter className="border-t px-6 py-3">
+        <DialogFooter className="border-t px-6 py-3 shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

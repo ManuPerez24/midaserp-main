@@ -40,9 +40,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { PermissionsEditor } from "@/components/permissions-editor";
 import { PageGuard } from "@/components/page-guard";
+import { logAction } from "@/stores/audit-log";
+import { useSettings } from "@/stores/settings";
 
 export const Route = createFileRoute("/usuarios")({
-  head: () => ({ meta: [{ title: "Usuarios · MIDAS ERP" }] }),
+  head: () => ({ meta: [{ title: `Usuarios · ${useSettings.getState().settings.branding.siteName}` }] }),
   component: () => (
     <PageGuard adminOnly>
       <UsersPage />
@@ -259,6 +261,7 @@ function UsersPage() {
                 try {
                   await adminDeleteUser({ data: { userId: deleteTarget.userId } });
                   toast.success("Usuario eliminado");
+                  logAction("user:delete", `Usuario '${deleteTarget.email}' eliminado.`);
                   setDeleteTarget(null);
                   reload();
                 } catch (e: any) {
@@ -316,6 +319,7 @@ function CreateUserDialog({
         },
       });
       toast.success("Usuario creado");
+      logAction("user:create", `Usuario '${email}' creado.`);
       onOpenChange(false);
       onCreated();
     } catch (e: any) {
@@ -427,6 +431,7 @@ function EditUserDialog({
         },
       });
       toast.success("Usuario actualizado");
+      logAction("user:update", `Usuario '${email}' actualizado.`);
       onOpenChange(false);
       onSaved();
     } catch (e: any) {
@@ -524,6 +529,7 @@ function ChangePasswordDialog({
         data: { currentPassword: current, newPassword: next },
       });
       toast.success("Contraseña actualizada");
+      logAction("user:password-change", `Contraseña cambiada por el propio usuario.`);
       onOpenChange(false);
     } catch (e: any) {
       toast.error(e?.message || "No se pudo cambiar");

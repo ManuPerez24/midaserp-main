@@ -23,4 +23,4 @@ export const useQuoteTemplates = create<State>((set, get) => ({
   remove: (id) => set({ templates: get().templates.filter((t) => t.id !== id) }),
 }));
 
-registerServerStore("midas:v1:quote-templates", useQuoteTemplates, (state) => ({ templates: state.templates }));
+registerServerStore("midas:v1:quote-templates", useQuoteTemplates, (state) => ({ templates: state.templates }), { shared: true });

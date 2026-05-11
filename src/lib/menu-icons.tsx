@@ -9,6 +9,11 @@ import {
   Star,
   Tag,
   Wrench,
+  Kanban,
+  ShoppingCart,
+  History,
+  ShieldCheck,
+  HardHat,
   type LucideIcon,
 } from "lucide-react";
 import type { MenuIconName } from "@/lib/types";
@@ -24,6 +29,11 @@ export const ICON_MAP: Record<MenuIconName, LucideIcon> = {
   Star,
   Tag,
   Wrench,
+  Kanban,
+  ShoppingCart,
+  History,
+  ShieldCheck,
+  HardHat,
 };
 
 export const ICON_OPTIONS: MenuIconName[] = [
@@ -36,6 +46,11 @@ export const ICON_OPTIONS: MenuIconName[] = [
   "Star",
   "Tag",
   "Wrench",
+  "Kanban",
+  "ShoppingCart",
+  "History",
+  "ShieldCheck",
+  "HardHat",
   "Settings",
 ];
 
@@ -44,8 +59,12 @@ export const ROUTE_FOR_ID: Record<string, string> = {
   inventario: "/inventario",
   kits: "/kits",
   cotizaciones: "/cotizaciones",
+  kanban: "/kanban",
+  compras: "/compras",
+  "audit-log": "/audit-log",
   "cotizaciones-proveedores": "/cotizaciones-proveedores",
   clientes: "/clientes",
   recordatorios: "/recordatorios",
   usuarios: "/usuarios",
+  proyectos: "/proyectos",
 };

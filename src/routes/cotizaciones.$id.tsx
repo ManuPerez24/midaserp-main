@@ -14,6 +14,12 @@ import {
   Calendar,
   Copy,
   ShoppingCart,
+  MessageCircle,
+  RefreshCcw,
+  Mail,
+  Paperclip,
+  Upload,
+  File,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -38,6 +44,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Loader2 } from "lucide-react";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -48,20 +61,24 @@ import {
 import { useQuotes } from "@/stores/quotes";
 import { useClients } from "@/stores/clients";
 import { useSettings } from "@/stores/settings";
+import { useInventory } from "@/stores/inventory";
 import { useActiveTask, requestActivateQuote, clearActiveTask } from "@/stores/active-task";
+import { logAction } from "@/stores/audit-log";
 import { useResourceLock } from "@/lib/use-resource-lock";
 import { useAuth } from "@/stores/auth";
 import { useQuoteTemplates } from "@/stores/quote-templates";
 import { formatDate, formatMoney } from "@/lib/utils";
 import { computeTotals, daysUntil, isExpired } from "@/lib/quote-calc";
+import { generateQrDataUrl, quoteVerifyUrl } from "@/lib/qr";
 import { QuotePdfDocument } from "@/components/pdf/quote-pdf";
 import { QuoteEditDialog } from "@/components/quote-edit-dialog";
 import { PurchaseListsDialog } from "@/components/purchase-lists-dialog";
 import { PageGuard } from "@/components/page-guard";
+import { useCan } from "@/lib/use-can";
 
 export const Route = createFileRoute("/cotizaciones/$id")({
   head: ({ params }) => ({
-    meta: [{ title: `Cotización ${params.id.slice(0, 6)} · MIDAS ERP` }],
+    meta: [{ title: `Cotización ${params.id.slice(0, 6)} · ${useSettings.getState().settings.branding.siteName}` }],
   }),
   component: () => (
     <PageGuard permission="page:cotizaciones">
@@ -88,7 +105,9 @@ export const Route = createFileRoute("/cotizaciones/$id")({
 function QuoteDetail() {
   const { id } = Route.useParams();
   const quote = useQuotes((s) => s.quotes.find((q) => q.id === id));
+  const canCreate = useCan("cotizaciones:create");
   const removeLine = useQuotes((s) => s.removeLine);
+  const cloneQuote = useQuotes((s) => s.clone);
   const updateLineQty = useQuotes((s) => s.updateLineQty);
   const updateLineDiscount = useQuotes((s) => s.updateLineDiscount);
   const updateLinePrice = useQuotes((s) => s.updateLinePrice);
@@ -100,8 +119,9 @@ function QuoteDetail() {
 
   const clients = useClients((s) => s.clients);
   const settings = useSettings((s) => s.settings);
+  const consumeFolio = useSettings((s) => s.consumeFolio);
+  const products = useInventory((s) => s.products);
   const active = useActiveTask((s) => s.active);
-  
   
   const templates = useQuoteTemplates((s) => s.templates);
   const addTemplate = useQuoteTemplates((s) => s.add);
@@ -117,10 +137,15 @@ function QuoteDetail() {
   );
   const [tplOpen, setTplOpen] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<string>("");
+  const [targetCurrency, setTargetCurrency] = useState<"MXN" | "USD">("USD");
+  const [fetchingRate, setFetchingRate] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [tplName, setTplName] = useState("");
   const [tplValidity, setTplValidity] = useState("15");
+  const [qrUrl, setQrUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (quote) {
@@ -129,6 +154,17 @@ function QuoteDetail() {
       setGlobalDisc(String(quote.globalDiscountPercent ?? 0));
       setValidUntilStr(quote.validUntil ? quote.validUntil.slice(0, 10) : "");
     }
+  }, [quote?.id]);
+
+  useEffect(() => {
+    if (!quote) return;
+    let cancelled = false;
+    generateQrDataUrl(quoteVerifyUrl(quote.id)).then((u) => {
+      if (!cancelled) setQrUrl(u);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [quote?.id]);
 
   if (!quote) throw notFound();
@@ -146,6 +182,7 @@ function QuoteDetail() {
   const currency = quote.lines[0]?.currency ?? "MXN";
   const expired = isExpired(quote.validUntil);
   const remainingDays = daysUntil(quote.validUntil);
+  const currentCurrency = quote.lines[0]?.currency ?? "MXN";
 
   const publicUrl = useMemo(
     () =>
@@ -162,6 +199,18 @@ function QuoteDetail() {
     } catch {
       toast.error("No se pudo copiar");
     }
+  };
+
+  const sendWhatsApp = () => {
+    const msg = `Hola ${client?.receiver ?? ""}, te comparto tu cotización ${quote.folio} por un total de ${formatMoney(totals.total, currency)}.\n\nPuedes revisarla y descargarla aquí:\n${publicUrl}`;
+    const phone = client?.phone ? client.phone.replace(/\D/g, "") : "";
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  const sendEmail = () => {
+    const subject = `Cotización ${quote.folio}`;
+    const body = `Hola ${client?.receiver ?? ""},\n\nTe comparto la cotización ${quote.folio} por un total de ${formatMoney(totals.total, currency)}.\n\nPuedes verla y descargarla en el siguiente enlace:\n${publicUrl}`;
+    window.open(`mailto:${client?.email ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
   const handleSaveTemplate = () => {
@@ -185,6 +234,13 @@ function QuoteDetail() {
 
   const downloadPdf = async (hidePrices: boolean) => {
     try {
+      const imageLookup: Record<string, string | null> = {};
+      const partLookup: Record<string, string> = {};
+      for (const p of products) {
+        partLookup[p.id] = p.partNumber || "";
+        imageLookup[p.id] = p.imageDataUrl || null;
+      }
+
       const { pdf } = await import("@react-pdf/renderer");
       const blob = await pdf(
         <QuotePdfDocument
@@ -192,6 +248,9 @@ function QuoteDetail() {
           client={client}
           settings={settings}
           hidePrices={hidePrices}
+          qrDataUrl={qrUrl}
+          partLookup={partLookup}
+          imageLookup={imageLookup}
         />
       ).toBlob();
       const url = URL.createObjectURL(blob);
@@ -211,9 +270,23 @@ function QuoteDetail() {
 
   const printPdf = async () => {
     try {
+      const imageLookup: Record<string, string | null> = {};
+      const partLookup: Record<string, string> = {};
+      for (const p of products) {
+        partLookup[p.id] = p.partNumber || "";
+        imageLookup[p.id] = p.imageDataUrl || null;
+      }
+
       const { pdf } = await import("@react-pdf/renderer");
       const blob = await pdf(
-        <QuotePdfDocument quote={quote} client={client} settings={settings} />
+        <QuotePdfDocument 
+          quote={quote} 
+          client={client} 
+          settings={settings} 
+          qrDataUrl={qrUrl}
+          partLookup={partLookup}
+          imageLookup={imageLookup}
+        />
       ).toBlob();
       const url = URL.createObjectURL(blob);
       const w = window.open(url);
@@ -221,6 +294,29 @@ function QuoteDetail() {
     } catch {
       toast.error("No se pudo imprimir");
     }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("El archivo supera el límite de 5MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const newAttachment = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        type: file.type,
+        dataUrl: String(reader.result),
+        createdAt: new Date().toISOString(),
+      };
+      updateQuote(quote.id, { attachments: [...(quote.attachments || []), newAttachment] });
+      toast.success("Archivo adjuntado correctamente");
+      logAction("quote:attachment-added", `Archivo '${file.name}' adjuntado a la cotización ${quote.folio}`);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -311,9 +407,42 @@ function QuoteDetail() {
           <Button variant="outline" onClick={() => setTplOpen(true)}>
             <LayoutTemplate className="mr-2 h-4 w-4" /> Plantillas
           </Button>
-          <Button variant="outline" onClick={copyPublicLink}>
-            <Share2 className="mr-2 h-4 w-4" /> Compartir
-          </Button>
+          {canCreate && (
+            <Button variant="outline" onClick={() => {
+              const folio = consumeFolio();
+              const newQ = cloneQuote(quote.id, folio);
+              toast.success(`Cotización duplicada como ${folio}`);
+              logAction("quote:clone", `Cotización '${quote.folio}' duplicada como '${folio}'.`);
+              window.location.assign(`/cotizaciones/${newQ.id}`);
+            }}>
+              <Copy className="mr-2 h-4 w-4" /> Duplicar
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Share2 className="mr-2 h-4 w-4" /> Compartir
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={copyPublicLink}>
+                <Copy className="mr-2 h-4 w-4" /> Copiar enlace web
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={sendWhatsApp}>
+                <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" /> Enviar por WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={sendEmail}>
+                <Mail className="mr-2 h-4 w-4 text-blue-600" /> Enviar por Correo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                setTargetCurrency(currentCurrency === "MXN" ? "USD" : "MXN");
+                setExchangeRate("");
+                setConvertOpen(true);
+              }}>
+                <RefreshCcw className="mr-2 h-4 w-4 text-amber-600" /> Convertir moneda
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={printPdf}>
             <Printer className="mr-2 h-4 w-4" /> Imprimir
           </Button>
@@ -395,9 +524,18 @@ function QuoteDetail() {
                             min="1"
                             disabled={lockedByOther}
                             value={l.quantity}
-                            onChange={(e) =>
-                              updateLineQty(quote.id, l.productId, parseInt(e.target.value) || 1)
-                            }
+                            onChange={(e) => {
+                              const newQty = parseInt(e.target.value) || 1;
+                              updateLineQty(quote.id, l.productId, newQty);
+                              const prod = products.find(p => p.id === l.productId);
+                              if (prod?.volumePrices && prod.volumePrices.length > 0) {
+                                const applicable = [...prod.volumePrices].sort((a,b) => b.minQty - a.minQty).find(v => newQty >= v.minQty);
+                                const newPrice = applicable ? applicable.price : prod.price;
+                                if (newPrice !== l.unitPrice) {
+                                  updateLinePrice(quote.id, l.productId, newPrice);
+                                }
+                              }
+                            }}
                             className="h-8 w-20"
                           />
                         </TableCell>
@@ -556,6 +694,43 @@ function QuoteDetail() {
         </Card>
       </div>
 
+      <Card className="mt-4">
+        <CardHeader className="flex flex-row items-center justify-between py-4">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="h-4 w-4" /> Expediente y Archivos
+          </CardTitle>
+          <div>
+            <input type="file" id="quote-file" className="hidden" onChange={handleFileUpload} />
+            <Button asChild variant="outline" size="sm">
+              <label htmlFor="quote-file" className="cursor-pointer">
+                <Upload className="mr-2 h-4 w-4" /> Subir archivo
+              </label>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {(!quote.attachments || quote.attachments.length === 0) ? (
+            <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg">No hay archivos adjuntos en esta cotización.</p>
+          ) : (
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {quote.attachments.map(att => (
+                <div key={att.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                  <File className="h-6 w-6 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" title={att.name}>{att.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(att.createdAt)}</p>
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <Button asChild variant="ghost" size="icon" className="h-6 w-6"><a href={att.dataUrl} download={att.name}><Download className="h-3 w-3" /></a></Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => updateQuote(quote.id, { attachments: quote.attachments!.filter(a => a.id !== att.id) })}><Trash2 className="h-3 w-3" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Diálogo de plantillas */}
       <Dialog open={tplOpen} onOpenChange={setTplOpen}>
         <DialogContent className="max-w-lg">
@@ -621,6 +796,53 @@ function QuoteDetail() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Convertir a {targetCurrency}</DialogTitle>
+            <DialogDescription>
+              Ajusta todos los precios y la moneda de la cotización usando el tipo de cambio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Tipo de cambio ({currentCurrency} a {targetCurrency})</Label>
+              <div className="flex gap-2">
+                <Input type="number" step="0.0001" min="0.0001" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="Ej. 20.50" />
+                <Button variant="outline" disabled={fetchingRate} onClick={async () => {
+                  setFetchingRate(true);
+                  try {
+                    const res = await fetch("https://open.er-api.com/v6/latest/USD");
+                    const data = await res.json();
+                    if (data?.rates?.MXN) {
+                      const mxnRate = data.rates.MXN;
+                      setExchangeRate(targetCurrency === "MXN" ? mxnRate.toFixed(4) : (1 / mxnRate).toFixed(4));
+                      toast.success("Tipo de cambio en vivo");
+                    }
+                  } catch {
+                    toast.error("Error al obtener tipo de cambio");
+                  } finally {
+                    setFetchingRate(false);
+                  }
+                }}>
+                  {fetchingRate ? <Loader2 className="h-4 w-4 animate-spin" /> : "Auto"}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              const rate = parseFloat(exchangeRate);
+              if (isNaN(rate) || rate <= 0) return toast.error("Tipo de cambio inválido");
+              quote.lines.forEach(l => { updateLinePrice(quote.id, l.productId, l.unitPrice * rate); updateLineFields(quote.id, l.productId, { currency: targetCurrency }); });
+              setConvertOpen(false);
+              toast.success(`Convertida a ${targetCurrency}`);
+            }}>Convertir</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

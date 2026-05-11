@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, Trash2, Check, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Check, ArrowLeft, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,9 +29,10 @@ import { formatDate } from "@/lib/utils";
 import { notify } from "@/stores/notifications";
 import { PageGuard } from "@/components/page-guard";
 import { useCan } from "@/lib/use-can";
+import { useSettings } from "@/stores/settings";
 
 export const Route = createFileRoute("/recordatorios")({
-  head: () => ({ meta: [{ title: "Recordatorios · MIDAS ERP" }] }),
+  head: () => ({ meta: [{ title: `Recordatorios · ${useSettings.getState().settings.branding.siteName}` }] }),
   component: () => (
     <PageGuard permission="page:recordatorios">
       <RecordatoriosPage />
@@ -67,6 +68,16 @@ function RecordatoriosPage() {
     setNote("");
     setDate("");
     toast.success("Recordatorio creado");
+  };
+
+  const addToCalendar = (r: any, clientName: string) => {
+    const start = new Date(r.dueDate);
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // Agendado por 1 hora
+    const title = encodeURIComponent(`Seguimiento: ${clientName}`);
+    const details = encodeURIComponent(r.note);
+    const formatTime = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, "");
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${formatTime(start)}/${formatTime(end)}`;
+    window.open(url, "_blank");
   };
 
   const sorted = [...reminders].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -207,7 +218,17 @@ function RecordatoriosPage() {
                           {r.note}
                         </TableCell>
                         <TableCell>
-                          {canDelete && (
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-blue-600"
+                              onClick={() => addToCalendar(r, client?.receiver ?? "Cliente sin nombre")}
+                              title="Añadir a Google Calendar"
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </Button>
+                            {canDelete && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -216,7 +237,8 @@ function RecordatoriosPage() {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                          )}
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

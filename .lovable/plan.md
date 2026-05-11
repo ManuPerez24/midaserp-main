@@ -1,74 +1,33 @@
-# Plan en 3 iteraciones
+# Plan de Innovación y Estructura (Midas ERP)
 
-Saltamos el refactor `src/server → src/api` (no arregla nada real). Vamos en el orden que elegiste: **C → B → A**. Cada iteración es independiente y se puede aprobar/pausar por separado para cuidar créditos.
+*Nota: El plan original de estabilización de UI (Iteraciones C, B, A) fue descartado a favor de acelerar las innovaciones de UX/IA.*
 
----
-
-## Iteración C — Scroll vertical en popups con tablas
-
-**Objetivo:** ningún Dialog que contenga tabla/lista larga debe cortar contenido en pantallas pequeñas.
-
-**Archivos a auditar y ajustar:**
-- `src/components/purchase-lists-dialog.tsx`
-- `src/components/price-history-dialog.tsx`
-- `src/components/labels-dialog.tsx`
-- `src/components/quote-edit-dialog.tsx`
-- `src/components/analyze-supplier-quote-dialog.tsx` (verificar — ya tocado)
-- Diálogos inline en: `routes/inventario.tsx`, `routes/cotizaciones.tsx`, `routes/cotizaciones-proveedores.tsx`, `routes/clientes.tsx`, `routes/kits.tsx`, `routes/usuarios.tsx`, `routes/ajustes.tsx`
-
-**Patrón aplicado:**
-- `DialogContent` → `flex flex-col max-h-[90vh]`
-- Contenedor de tabla → `flex-1 min-h-0 overflow-y-auto` (o `max-h-[60vh] overflow-y-auto` si el dialog no es flex-column)
-- Headers de tabla → `sticky top-0 bg-background z-10`
-- Footer del dialog → fuera del área scrollable
+## Fases de Innovación y Documentación (Completadas):
+1. **[Completado]** Paleta de Comandos interactiva (`Cmd+K`).
+2. **[Completado]** Inteligencia Artificial: Asistente "Midas AI" global y flotante.
+3. **[Completado]** Extracción de datos por OCR automático (Configurado para Groq/OpenRouter).
+4. **[Completado]** Analítica predictiva (Predicción de quiebre de stock calculando velocidad de consumo en el Dashboard).
+5. **[Completado]** Radiografía y Documentación del Sistema (`architecture.md`).
+6. **[Completado]** Pulido Visual de Tablas Restantes (UI/UX - Clientes y Kits).
+7. **[Completado]** Fase 4: Motor de PDFs Avanzado (Plantillas, ocultar columnas, y Creador Visual Drag-and-Drop).
 
 ---
 
-## Iteración B — Limpieza de huérfanos + gestión de unidades
+## Siguientes Pasos: Fase 5 - Módulo de Proyectos (Gantt, Kanban y Levantamiento)
+**Objetivo:** Crear un puente entre las ventas (Cotizaciones) y la ejecución, gestionando levantamientos, tareas y consumo de inventario.
 
-**B.1 – Limpieza automática de huérfanos**
-- En `src/stores/settings.ts`: añadir acción `pruneOrphans(usedCategories, usedSuppliers, usedUnits)` que filtra listas dejando solo valores en uso.
-- En `routes/ajustes.tsx` (sección de mantenimiento/limpieza): botón "Limpiar registros huérfanos" que recolecta categorías/proveedores/unidades realmente usadas en `inventory.products` + `supplier-quotes` y llama `pruneOrphans`.
-- También ejecutar al final de "Limpieza de base de datos" existente, si aplica.
-- Toast con resumen: "Eliminadas X categorías, Y proveedores, Z unidades sin uso."
-
-**B.2 – Gestión de unidades en formularios**
-- Auditar formularios donde se ingresa unidad: `product-form.tsx`, `quote-edit-dialog.tsx`, `analyze-supplier-quote-dialog.tsx`, formulario de kits.
-- Patrón uniforme: input + botón "+" → llama `useSettings.getState().addUnit(value)` → el `Select` se refresca por suscripción (Zustand) → la nueva unidad queda persistida vía `registerServerStore` (ya existente para settings, shared).
-- Mismo patrón aplicado a categorías y proveedores donde falte.
+*   **[Completado] Paso 1: Store y Listado.** Crear `useProjects` (Zustand) y la vista principal `/proyectos` con la tabla y tarjetas de proyectos.
+*   **[Completado] Paso 2: Pantalla de Levantamiento y Explorador.** Formulario dinámico, notas técnicas y un Explorador de Archivos responsivo (Mobile-first) con vista previa interactiva, cálculo de peso, filtros, y almacenamiento local en Node.js (`public/uploads/`).
+*   **[Completado] Paso 3: Vinculación con Cotizaciones.** Interfaz dentro del proyecto para buscar y enlazar cotizaciones existentes de `useQuotes` leyendo directamente sus partidas, incluyendo sumatoria dinámica con impuestos.
+*   **[Completado] Paso 4: Tarea Activa y Consumo.** Integrar el proyecto al banner de "Tarea Activa" para descontar material del inventario gradualmente y sumarlo al costo del proyecto.
+*   **[Completado] Paso 5: Gantt y Kanban.** Tablero Kanban interactivo y una **Página de Cronograma (Gantt) dedicada** a pantalla completa (`/proyectos/$id`) con repogramación rápida y línea de "Hoy".
+*   **[Completado] Paso 5.1: Gantt Avanzado (CSS Grid & SVG).** Creación in-situ, auto-enfoque a "Hoy", barras con progreso bi-tono (70/30%), Avatares de recursos circulares, y conexión de tareas interdependientes mediante vectores SVG en ángulo de 90°.
 
 ---
 
-## Iteración A — Edición en cotizaciones y kits
+## Backlog / En Espera:
 
-**A.1 – Editar/borrar productos en popup de cotización**
-- En `src/components/quote-edit-dialog.tsx` (o `routes/cotizaciones.$id.tsx`):
-  - Cada línea del detalle: botones "Editar" (precio/cantidad/descripción inline) y "Eliminar".
-  - Recalcular subtotales/IVA/total en el store al modificar.
-  - Persistencia vía store existente (`stores/quotes.ts`) → ya se sincroniza por `registerServerStore`.
-
-**A.2 – Editar Kits**
-- En el dialog de detalles de Kit (`routes/kits.tsx`):
-  - Modo edición de campos: nombre, descripción, categoría/metadatos.
-  - Guardar con acción `useKits.update(id, patch)` (añadir si no existe en `stores/kits.ts`).
-  - Persistencia automática por la sincronización del store.
-- No se necesitan Server Functions nuevas: el sync de stores ya guarda en MongoDB vía `saveUserData`.
-
----
-
-## Detalles técnicos
-
-- **Sin nuevas Server Functions** salvo que aparezca un caso real: los stores Zustand ya están enlazados a `saveUserData` (debounce 400ms) — mutar el store ya persiste y refresca la UI.
-- **TanStack Query** no se usa ampliamente en este proyecto (datos vienen de stores Zustand hidratados al login). No hay caché que invalidar; la reactividad la da Zustand.
-- **TypeScript estricto:** sin `any`, tipos en parámetros de nuevas acciones del store.
-- **Estética:** mismos componentes shadcn (`Button`, `Input`, `Dialog`, `Table`) y tokens de color ya en uso.
-
----
-
-## Notas sobre el refactor descartado
-
-Mover `*.functions.ts` a `src/api/` no aporta seguridad ni corrige errores: TanStack Start ya separa cliente/servidor por nombre de archivo (`*.server.ts` está bloqueado al cliente, `*.functions.ts` se transforma a stub RPC). Los componentes que importan de `src/server/*.functions.ts` están haciendo lo correcto. Si en el futuro quieres el cambio cosmético, lo podemos retomar en una iteración aparte.
-
----
-
-¿Empezamos por la **Iteración C** sola, o quieres aprobar C+B juntas?
+### Fase 3: Notificaciones e Integraciones Externas (Pausado indefinidamente)
+**Objetivo:** Conectar el sistema hacia afuera para mejorar la comunicación.
+- **Notificaciones por WhatsApp:** Añadir una opción rápida para enviar la URL pública del PDF de la cotización directamente al WhatsApp del cliente con un mensaje predefinido.
+- **Despliegue a Producción:** Preparar todo para subir Midas ERP a la nube usando la guía `deploy.md`, habilitando el trabajo colaborativo real.

@@ -62,7 +62,7 @@ function PublicQuote() {
         </div>
         <QuotePreviewSheet quote={quote} client={client} settings={settings} qrDataUrl={qrUrl} />
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Documento generado por {settings.issuer.companyName || "MIDAS ERP"} ·{" "}
+          Documento generado por {settings.issuer.companyName || settings.branding.siteName} ·{" "}
           <Link to="/" className="underline">
             Inicio
           </Link>

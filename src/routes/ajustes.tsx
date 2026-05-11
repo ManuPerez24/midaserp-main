@@ -48,9 +48,12 @@ import { saveUserData } from "@/util/sync.functions";
 import { useAuth } from "@/stores/auth";
 import { Save, ShieldAlert } from "lucide-react";
 import { PageGuard } from "@/components/page-guard";
+import { logAction } from "@/stores/audit-log";
+import { optimizeImage } from "@/lib/image-utils";
+import { SortablePdfLayout } from "@/components/sortable-pdf-layout";
 
 export const Route = createFileRoute("/ajustes")({
-  head: () => ({ meta: [{ title: "Ajustes · MIDAS ERP" }] }),
+  head: () => ({ meta: [{ title: `Ajustes · ${useSettings.getState().settings.branding.siteName}` }] }),
   component: () => (
     <PageGuard adminOnly>
       <AjustesPage />
@@ -189,13 +192,14 @@ function AjustesPage() {
     toast.success("Menú restaurado");
   };
 
-  const handleLogo = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateIssuer({ logoDataUrl: String(reader.result) });
+  const handleLogo = async (file: File) => {
+    try {
+      const dataUrl = await optimizeImage(file, 600, 600, 0.9);
+      updateIssuer({ logoDataUrl: dataUrl });
       toast.success("Logo actualizado");
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Error al procesar el logo");
+    }
   };
 
   const previewStyle = useMemo(
@@ -591,6 +595,21 @@ function AjustesPage() {
         </Card>
 
         <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Estructura del PDF (Drag & Drop)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Arrastra los bloques para reordenar la información y presentación en tus cotizaciones.
+            </p>
+            <SortablePdfLayout
+              layout={settings.pdf.layout ?? ["header", "client", "table", "totals", "notes", "terms"]}
+              onChange={(newLayout) => updatePdf({ layout: newLayout })}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Plantilla del PDF</CardTitle>
             <Button onClick={() => setPreviewOpen(true)} variant="outline">
@@ -598,6 +617,18 @@ function AjustesPage() {
             </Button>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Estilo / Diseño</Label>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={settings.pdf.template ?? "modern"}
+                onChange={(e) => updatePdf({ template: e.target.value as "modern" | "minimalist" | "classic" })}
+              >
+                <option value="modern">Moderno (Bloques de color)</option>
+                <option value="minimalist">Minimalista (Bordes y fondo blanco)</option>
+                <option value="classic">Clásico (Sobrio y formal)</option>
+              </select>
+            </div>
             <div className="space-y-1.5">
               <Label>Color del encabezado</Label>
               <div className="flex items-center gap-2">
@@ -612,6 +643,36 @@ function AjustesPage() {
                   onChange={(e) => updatePdf({ headerColor: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Mostrar fotos de productos</Label>
+                <p className="text-xs text-muted-foreground">Muestra la miniatura en la tabla del PDF.</p>
+              </div>
+              <Switch
+                checked={settings.pdf.showPhotos !== false}
+                onCheckedChange={(v) => updatePdf({ showPhotos: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Mostrar SKU / Código</Label>
+                <p className="text-xs text-muted-foreground">Incluye la columna del SKU del producto.</p>
+              </div>
+              <Switch
+                checked={settings.pdf.showSku !== false}
+                onCheckedChange={(v) => updatePdf({ showSku: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Mostrar descuento</Label>
+                <p className="text-xs text-muted-foreground">Columna de descuento por línea.</p>
+              </div>
+              <Switch
+                checked={settings.pdf.showDiscount !== false}
+                onCheckedChange={(v) => updatePdf({ showDiscount: v })}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Color de acento (tabla)</Label>
@@ -646,6 +707,16 @@ function AjustesPage() {
               <Switch
                 checked={settings.pdf.zebra}
                 onCheckedChange={(v) => updatePdf({ zebra: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Mostrar notas adicionales</Label>
+                <p className="text-xs text-muted-foreground">Incluye las notas de la cotización en el PDF.</p>
+              </div>
+              <Switch
+                checked={settings.pdf.showNotes !== false}
+                onCheckedChange={(v) => updatePdf({ showNotes: v })}
               />
             </div>
             <div className="space-y-1.5">
@@ -688,6 +759,26 @@ function AjustesPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Inventario</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Control de existencias (Stock)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Permite indicar stock en los productos y lo descuenta al cerrar o aceptar cotizaciones.
+                </p>
+              </div>
+              <Switch
+                checked={(settings as any).inventory?.enableStock === true}
+                onCheckedChange={(v) => updateSettings({ inventory: { ...((settings as any).inventory || {}), enableStock: v } } as any)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Menú lateral</CardTitle>
@@ -722,25 +813,23 @@ function AjustesPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Configura el proveedor de IA que se usa para analizar cotizaciones de proveedores
-              (imágenes, PDF y texto). Por defecto se usa Lovable AI con la clave incluida en tu
-              workspace.
+              Configura el proveedor de IA y las credenciales que se usarán para el Asistente Midas,
+              así como para analizar las cotizaciones (imágenes, PDF y texto).
             </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Proveedor</Label>
                 <Select
-                  value={settings.ai?.provider ?? "lovable"}
+                  value={settings.ai?.provider ?? "openai"}
                   onValueChange={(v) =>
-                    updateAi({ provider: v as "lovable" | "openai" | "custom" })
+                    updateAi({ ...settings.ai, provider: v as "openai" | "custom" })
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="lovable">Lovable AI (Gemini / GPT)</SelectItem>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="custom">Personalizado (compatible OpenAI)</SelectItem>
                   </SelectContent>
@@ -751,17 +840,15 @@ function AjustesPage() {
                 <Label>Modelo</Label>
                 <Input
                   placeholder={
-                    (settings.ai?.provider ?? "lovable") === "openai"
+                    (settings.ai?.provider ?? "openai") === "openai"
                       ? "gpt-4o-mini"
-                      : "google/gemini-2.5-flash"
+                      : "tu-modelo-aqui"
                   }
                   value={settings.ai?.model ?? ""}
-                  onChange={(e) => updateAi({ model: e.target.value })}
+                  onChange={(e) => updateAi({ ...settings.ai, model: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {(settings.ai?.provider ?? "lovable") === "lovable"
-                    ? "Ej: google/gemini-2.5-flash, google/gemini-2.5-pro, openai/gpt-5-mini"
-                    : (settings.ai?.provider ?? "lovable") === "openai"
+                  {(settings.ai?.provider ?? "openai") === "openai"
                       ? "Ej: gpt-4o-mini, gpt-4o, gpt-4-turbo"
                       : "El nombre del modelo según tu endpoint."}
                 </p>
@@ -769,20 +856,15 @@ function AjustesPage() {
 
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>
-                  API Key{" "}
-                  {(settings.ai?.provider ?? "lovable") === "lovable" && (
-                    <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
-                  )}
+                  API Key
                 </Label>
                 <Input
                   type="password"
                   placeholder={
-                    (settings.ai?.provider ?? "lovable") === "lovable"
-                      ? "Vacío = usar LOVABLE_API_KEY del workspace"
-                      : "sk-..."
+                    "sk-..."
                   }
                   value={settings.ai?.apiKey ?? ""}
-                  onChange={(e) => updateAi({ apiKey: e.target.value })}
+                  onChange={(e) => updateAi({ ...settings.ai, apiKey: e.target.value })}
                   autoComplete="off"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -790,26 +872,26 @@ function AjustesPage() {
                 </p>
               </div>
 
-              {(settings.ai?.provider ?? "lovable") === "custom" && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Base URL</Label>
-                  <Input
-                    placeholder="https://mi-endpoint.com/v1"
-                    value={settings.ai?.baseUrl ?? ""}
-                    onChange={(e) => updateAi({ baseUrl: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Endpoint compatible con OpenAI. Se llamará a{" "}
-                    <code>{"{baseUrl}/chat/completions"}</code>.
-                  </p>
-                </div>
-              )}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Base URL</Label>
+                <Input
+                  placeholder="https://api.openai.com/v1"
+                  value={(settings.ai?.provider ?? "openai") === "openai" ? "https://api.openai.com/v1" : (settings.ai?.baseUrl ?? "")}
+                  onChange={(e) => updateAi({ ...settings.ai, baseUrl: e.target.value })}
+                  disabled={(settings.ai?.provider ?? "openai") === "openai"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {(settings.ai?.provider ?? "openai") === "openai" 
+                    ? "Para modificar el Base URL, cambia el Proveedor a 'Personalizado' arriba."
+                    : <>Endpoint compatible con OpenAI. Se llamará a <code>{"{baseUrl}/chat/completions"}</code>.</>}
+                </p>
+              </div>
 
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Prompt del sistema</Label>
                 <Textarea
                   value={settings.ai?.systemPrompt ?? DEFAULT_AI_SYSTEM_PROMPT}
-                  onChange={(e) => updateAi({ systemPrompt: e.target.value })}
+                  onChange={(e) => updateAi({ ...settings.ai, systemPrompt: e.target.value })}
                   rows={5}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -821,7 +903,7 @@ function AjustesPage() {
                 <Label>Prompt del usuario</Label>
                 <Textarea
                   value={settings.ai?.userPrompt ?? DEFAULT_AI_USER_PROMPT}
-                  onChange={(e) => updateAi({ userPrompt: e.target.value })}
+                  onChange={(e) => updateAi({ ...settings.ai, userPrompt: e.target.value })}
                   rows={5}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -928,6 +1010,7 @@ function SaveSettingsBar() {
         data: { store: "midas:v1:settings", data: { settings }, shared: true },
       });
       toast.success("Ajustes guardados");
+      logAction("settings:save", "Ajustes generales guardados.");
     } catch (e) {
       console.error(e);
       toast.error("No se pudieron guardar los ajustes");

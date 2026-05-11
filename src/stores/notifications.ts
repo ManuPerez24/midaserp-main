@@ -46,7 +46,7 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
   unreadCount: () => get().items.filter((i) => !i.read).length,
 }));
 
-registerServerStore("midas:v1:notifications", useNotifications, (state) => ({ items: state.items }));
+registerServerStore("midas:v1:notifications", useNotifications, (state) => ({ items: state.items }), { shared: true });
 
 export function notify(kind: NotificationKind, message: string, link?: string) {
   useNotifications.getState().push(kind, message, link);

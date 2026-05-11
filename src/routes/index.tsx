@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { analyzeRejectionsWithAi } from "@/util/chat.functions";
+import { getStockOutPredictions } from "@/lib/smart-ai";
 import {
   Boxes,
   FileText,
@@ -11,7 +14,11 @@ import {
   TrendingUp,
   CheckCircle2,
   DollarSign,
+  LayoutGrid,
   Target,
+  AlertTriangle,
+  ThermometerSun,
+  HardHat,
 } from "lucide-react";
 import {
   Bar,
@@ -27,20 +34,32 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInventory } from "@/stores/inventory";
 import { useKits } from "@/stores/kits";
 import { useQuotes } from "@/stores/quotes";
 import { useClients } from "@/stores/clients";
+import { useProjects } from "@/stores/projects";
 import { useSettings } from "@/stores/settings";
 import { demoClients, demoProducts } from "@/lib/demo-data";
 import { formatMoney } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageGuard } from "@/components/page-guard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [{ title: "Dashboard · MIDAS ERP" }],
+    meta: [{ title: `Dashboard · ${useSettings.getState().settings.branding.siteName}` }],
   }),
   component: DashboardGuarded,
 });
@@ -96,10 +115,17 @@ function Dashboard() {
   const kits = useKits((s) => s.kits);
   const quotes = useQuotes((s) => s.quotes);
   const clients = useClients((s) => s.clients);
+  const projects = useProjects((s) => s.projects);
   const settings = useSettings((s) => s.settings);
 
   const addProduct = useInventory((s) => s.add);
   const addClient = useClients((s) => s.add);
+  const [widgets, setWidgets] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem('dash_widgets') || '{"kpis":true,"chartBar":true,"chartPie":true,"topClients":true,"topProducts":true,"thermometer":true,"stockOut":true}'));
+  const [timeFilter, setTimeFilter] = useState<"mes" | "pasado" | "ano" | "todo">("mes");
+
+  useEffect(() => {
+    localStorage.setItem('dash_widgets', JSON.stringify(widgets));
+  }, [widgets]);
 
   const loadDemo = () => {
     demoProducts.forEach((p) => addProduct(p));
@@ -127,9 +153,24 @@ function Dashboard() {
     return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-6);
   }, [quotes, settings.issuer.ivaPercent]);
 
+  const filteredQuotes = useMemo(() => {
+    const now = new Date();
+    return quotes.filter((q) => {
+      if (timeFilter === "todo") return true;
+      const d = new Date(q.createdAt);
+      if (timeFilter === "mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      if (timeFilter === "pasado") {
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return d.getFullYear() === prev.getFullYear() && d.getMonth() === prev.getMonth();
+      }
+      if (timeFilter === "ano") return d.getFullYear() === now.getFullYear();
+      return true;
+    });
+  }, [quotes, timeFilter]);
+
   const topClients = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const q of quotes) map[q.clientId] = (map[q.clientId] ?? 0) + 1;
+    for (const q of filteredQuotes) map[q.clientId] = (map[q.clientId] ?? 0) + 1;
     return Object.entries(map)
       .map(([id, count]) => ({
         nombre: clients.find((c) => c.id === id)?.receiver ?? "—",
@@ -137,38 +178,31 @@ function Dashboard() {
       }))
       .sort((a, b) => b.cotizaciones - a.cotizaciones)
       .slice(0, 5);
-  }, [quotes, clients]);
+  }, [filteredQuotes, clients]);
 
-  // ----- KPIs del mes en curso -----
-  const monthKpis = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
+  // ----- KPIs filtrados -----
+  const kpis = useMemo(() => {
     const iva = settings.issuer.ivaPercent / 100;
-    const inMonth = quotes.filter((q) => {
-      const d = new Date(q.createdAt);
-      return d.getFullYear() === y && d.getMonth() === m;
-    });
-    const totals = inMonth.map(
+    const totals = filteredQuotes.map(
       (q) => q.lines.reduce((a, l) => a + l.unitPrice * l.quantity, 0) * (1 + iva),
     );
     const sum = totals.reduce((a, b) => a + b, 0);
     const avg = totals.length ? sum / totals.length : 0;
-    const accepted = inMonth.filter((q) => q.status === "Aceptada" || q.status === "Cerrada").length;
-    const closeRate = inMonth.length ? (accepted / inMonth.length) * 100 : 0;
+    const accepted = filteredQuotes.filter((q) => q.status === "Aceptada" || q.status === "Cerrada").length;
+    const closeRate = filteredQuotes.length ? (accepted / filteredQuotes.length) * 100 : 0;
     return {
-      count: inMonth.length,
+      count: filteredQuotes.length,
       avgTicket: avg,
       accepted,
       closeRate,
-      currency: inMonth[0]?.lines[0]?.currency ?? settings.branding.defaultCurrency ?? "MXN",
+      currency: filteredQuotes[0]?.lines[0]?.currency ?? settings.branding.defaultCurrency ?? "MXN",
     };
-  }, [quotes, settings]);
+  }, [filteredQuotes, settings]);
 
   // ----- Top 5 productos más cotizados -----
   const topProducts = useMemo(() => {
     const map: Record<string, { name: string; qty: number }> = {};
-    for (const q of quotes) {
+    for (const q of filteredQuotes) {
       for (const l of q.lines) {
         const k = l.productId;
         if (!map[k]) map[k] = { name: l.name, qty: 0 };
@@ -178,7 +212,14 @@ function Dashboard() {
     return Object.values(map)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [quotes]);
+  }, [filteredQuotes]);
+
+  const filterLabel = {
+    mes: "del mes en curso",
+    pasado: "del mes pasado",
+    ano: "del año",
+    todo: "históricas",
+  }[timeFilter];
 
   return (
     <div className="space-y-6">
@@ -186,8 +227,40 @@ function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Resumen general del sistema MIDAS ERP.
+            Resumen general del sistema {settings.branding.siteName}.
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:absolute sm:left-1/2 sm:-translate-x-1/2">
+          <div className="flex items-center gap-2 bg-card rounded-md border px-2 py-1">
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Filtro:</span>
+            <Select value={timeFilter} onValueChange={(v: any) => setTimeFilter(v)}>
+              <SelectTrigger className="h-7 w-[120px] text-xs border-none bg-transparent shadow-none focus:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mes">Este mes</SelectItem>
+                <SelectItem value="pasado">Mes pasado</SelectItem>
+                <SelectItem value="ano">Este año</SelectItem>
+                <SelectItem value="todo">Todo el tiempo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 px-3" title="Personalizar Widgets">
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56 space-y-3">
+              <div className="text-sm font-semibold">Widgets visibles</div>
+              {[ { id: "kpis", label: "KPIs Principales" }, { id: "chartBar", label: "Gráfico de Cotizaciones" }, { id: "chartPie", label: "Gráfico de Estados" }, { id: "topClients", label: "Top Clientes" }, { id: "topProducts", label: "Top Productos" }, { id: "thermometer", label: "Termómetro de Ventas" }, { id: "stockOut", label: "Riesgo de Quiebre" } ].map(w => (
+                <label key={w.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded">
+                  <Checkbox checked={widgets[w.id]} onCheckedChange={(c) => setWidgets(prev => ({ ...prev, [w.id]: !!c }))} />
+                  {w.label}
+                </label>
+              ))}
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="flex gap-2">
           <Link to="/inventario">
@@ -203,26 +276,27 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Kpi title="Proyectos" value={projects.length} icon={HardHat} to="/proyectos" />
         <Kpi title="Cotizaciones" value={quotes.length} icon={FileText} to="/cotizaciones" />
         <Kpi title="Inventario" value={products.length} icon={Package} to="/inventario" />
         <Kpi title="Kits" value={kits.length} icon={Boxes} to="/kits" />
         <Kpi title="Clientes" value={clients.length} icon={Users} to="/clientes" />
       </div>
 
-      {quotes.length > 0 && (
+      {quotes.length > 0 && widgets.kpis && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Cotizaciones del mes
+                Cotizaciones ({filterLabel})
               </CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{monthKpis.count}</div>
+              <div className="text-3xl font-bold">{kpis.count}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {monthKpis.accepted} aceptadas / cerradas
+                {kpis.accepted} aceptadas / cerradas
               </p>
             </CardContent>
           </Card>
@@ -235,9 +309,9 @@ function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatMoney(monthKpis.avgTicket, monthKpis.currency)}
+                {formatMoney(kpis.avgTicket, kpis.currency)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Mes en curso, IVA incluido</p>
+              <p className="text-xs text-muted-foreground mt-1">IVA incluido</p>
             </CardContent>
           </Card>
           <Card>
@@ -248,7 +322,7 @@ function Dashboard() {
               <Target className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{monthKpis.closeRate.toFixed(0)}%</div>
+              <div className="text-3xl font-bold">{kpis.closeRate.toFixed(0)}%</div>
               <p className="text-xs text-muted-foreground mt-1">Aceptadas + cerradas</p>
             </CardContent>
           </Card>
@@ -260,8 +334,8 @@ function Dashboard() {
               <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{monthKpis.accepted}</div>
-              <p className="text-xs text-muted-foreground mt-1">En el mes en curso</p>
+              <div className="text-3xl font-bold">{kpis.accepted}</div>
+              <p className="text-xs text-muted-foreground mt-1">En el periodo seleccionado</p>
             </CardContent>
           </Card>
         </div>
@@ -274,7 +348,7 @@ function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              MIDAS ERP Lite te permite gestionar inventario, kits, clientes y emitir cotizaciones
+              {settings.branding.siteName} te permite gestionar inventario, kits, clientes y emitir cotizaciones
               en PDF de alta gama. Las gráficas aparecerán cuando crees cotizaciones.
             </p>
             {products.length === 0 && (
@@ -286,6 +360,7 @@ function Dashboard() {
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
+          {widgets.chartBar && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Cotizaciones por mes</CardTitle>
@@ -306,7 +381,9 @@ function Dashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {widgets.chartPie && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Estado de cotizaciones</CardTitle>
@@ -332,7 +409,9 @@ function Dashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {widgets.topClients && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Top clientes (por nº de cotizaciones)</CardTitle>
@@ -357,7 +436,9 @@ function Dashboard() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {widgets.topProducts && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Top 5 productos más cotizados</CardTitle>
@@ -387,6 +468,12 @@ function Dashboard() {
               )}
             </CardContent>
           </Card>
+          )}
+
+          {widgets.thermometer && <ThermometerWidget quotes={filteredQuotes} />}
+          {widgets.stockOut && (settings as any).inventory?.enableStock && (
+            <StockOutWidget quotes={quotes} products={products} />
+          )}
         </div>
       )}
 
@@ -401,5 +488,144 @@ function Dashboard() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function StockOutWidget({ quotes, products }: { quotes: any[], products: any[] }) {
+  const predictions = useMemo(() => getStockOutPredictions(quotes, products), [quotes, products]);
+  
+  return (
+    <Card className="h-64 flex flex-col">
+      <CardHeader className="py-3 border-b space-y-0 flex-row items-center justify-between">
+        <CardTitle className="text-base flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-amber-500" /> Riesgo de Quiebre
+        </CardTitle>
+        <Badge variant="outline">{predictions.length} alertas</Badge>
+      </CardHeader>
+      <CardContent className="flex-1 p-0 overflow-y-auto">
+        {predictions.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground p-4 text-center">
+            Todo en orden. Ningún producto con riesgo inminente de quiebre de stock.
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {predictions.map((p, i) => (
+              <li key={i} className="p-3 flex items-center justify-between gap-2 hover:bg-muted/50">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate" title={p.product.name}>{p.product.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-0.5">Stock actual: {p.product.stock}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  {p.daysLeft <= 0 ? (
+                    <span className="text-xs font-bold text-destructive">¡Agotado!</span>
+                  ) : (
+                    <span className={`text-xs font-bold ${p.daysLeft <= 15 ? 'text-destructive' : 'text-amber-500'}`}>
+                      Se agota en {p.daysLeft} d.
+                    </span>
+                  )}
+                  {p.dailyConsumption > 0 && (
+                    <div className="text-[10px] text-muted-foreground mt-0.5">-{p.dailyConsumption}/día</div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ThermometerWidget({ quotes }: any) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const analyzeRejections = useServerFn(analyzeRejectionsWithAi);
+  const settings = useSettings(s => s.settings);
+
+  const rejectedNotes = useMemo(() => quotes.filter((q: any) => q.status === "Rechazada").map((q: any) => q.notes).filter(Boolean), [quotes]);
+  const hash = rejectedNotes.join("|||");
+
+  useEffect(() => {
+    if (rejectedNotes.length === 0) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    analyzeRejections({
+      data: {
+        notes: rejectedNotes,
+        provider: settings.ai?.provider,
+        apiKey: settings.ai?.apiKey,
+        model: settings.ai?.model,
+        baseUrl: settings.ai?.baseUrl,
+      }
+    }).then(res => {
+      if (res.ok) {
+         setData({ ...res.data, reasonsCount: rejectedNotes.length });
+      }
+      setLoading(false);
+    });
+  }, [hash, settings.ai]);
+  
+  if (loading) {
+    return <Card className="h-[400px] flex items-center justify-center text-muted-foreground"><ThermometerSun className="h-5 w-5 mr-2 animate-spin" /> Analizando con IA...</Card>;
+  }
+
+  if (!data || !data.avgScore) {
+    return (
+      <Card className="h-[400px]">
+        <CardHeader className="py-3 border-b">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ThermometerSun className="h-5 w-5 text-rose-500" /> Termómetro de Ventas
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center h-full text-sm text-muted-foreground">
+          No hay suficientes cotizaciones rechazadas con notas para analizar.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isGood = data.avgScore >= 60;
+  const isBad = data.avgScore < 40;
+  const color = isBad ? "text-rose-500" : isGood ? "text-emerald-500" : "text-amber-500";
+
+  return (
+    <Card className="h-[400px] flex flex-col">
+      <CardHeader className="py-3 border-b">
+        <CardTitle className="text-base flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ThermometerSun className={`h-5 w-5 ${color}`} /> Termómetro de Rechazos
+          </div>
+          <Badge variant="outline">{data.reasonsCount} notas analizadas</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 p-5 overflow-y-auto space-y-6">
+        <div className="text-center">
+          <div className={`text-4xl font-black ${color} mb-1`}>
+            {Math.round(data.avgScore)} <span className="text-lg text-muted-foreground font-medium">/ 100</span>
+          </div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Índice de Salud de Ventas</p>
+          <p className="text-sm mt-3 leading-relaxed">
+            {isBad ? "Alerta: Muchos clientes reportan problemas de precio, tiempo o competencia." : isGood ? "Saludable: Las objeciones son normales y no presentan problemas críticos." : "Regular: Hay algunas quejas por precios o tiempos, mantente atento."}
+          </p>
+        </div>
+        
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3 text-center">Palabras más frecuentes</p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {data.topWords.map((w: any, i: number) => {
+               const size = Math.max(0.7, 1.5 - (i * 0.05));
+               const opacity = Math.max(0.5, 1 - (i * 0.04));
+               return (
+                 <span key={w.text} style={{ fontSize: `${size}rem`, opacity }} className="font-bold text-primary capitalize">
+                   {w.text}
+                 </span>
+               )
+            })}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

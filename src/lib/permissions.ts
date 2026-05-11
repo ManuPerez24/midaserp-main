@@ -11,6 +11,7 @@ export type PermissionKey =
   | "page:cotizaciones-proveedores"
   | "page:clientes"
   | "page:recordatorios"
+  | "page:proyectos"
   // acciones inventario
   | "inventario:create"
   | "inventario:edit"
@@ -62,6 +63,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "page:cotizaciones-proveedores", label: "Cot. Proveedores" },
       { key: "page:clientes", label: "Clientes" },
       { key: "page:recordatorios", label: "Recordatorios" },
+      { key: "page:proyectos", label: "Proyectos" },
     ],
   },
   {
@@ -150,6 +152,8 @@ export const PAGE_PERMISSION_FOR_ID: Record<string, PermissionKey> = {
   kits: "page:kits",
   cotizaciones: "page:cotizaciones",
   "cotizaciones-proveedores": "page:cotizaciones-proveedores",
+  compras: "page:cotizaciones",
   clientes: "page:clientes",
   recordatorios: "page:recordatorios",
+  proyectos: "page:proyectos",
 };

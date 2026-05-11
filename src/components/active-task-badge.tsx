@@ -1,16 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { X, FileText, Boxes } from "lucide-react";
+import { X, FileText, Boxes, HardHat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useActiveTask } from "@/stores/active-task";
+import { useActiveTask, clearActiveTask } from "@/stores/active-task";
 import { useQuotes } from "@/stores/quotes";
 import { useKits } from "@/stores/kits";
+import { useProjects } from "@/stores/projects";
 
 export function ActiveTaskBadge() {
   const active = useActiveTask((s) => s.active);
-  const clear = useActiveTask((s) => s.clear);
   const quotes = useQuotes((s) => s.quotes);
   const kits = useKits((s) => s.kits);
+  const projects = useProjects((s) => s.projects);
 
   if (!active) return null;
 
@@ -34,8 +35,28 @@ export function ActiveTaskBadge() {
           variant="ghost"
           size="icon"
           className="h-5 w-5"
-          onClick={clear}
+          onClick={clearActiveTask}
           title="Salir de modo edición"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  if (active.kind === "project") {
+    const p = projects.find((x) => x.id === active.id);
+    if (!p) return null;
+    return (
+      <div className="flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1">
+        <HardHat className="h-3.5 w-3.5 text-sky-700" />
+        <span className="text-xs font-medium text-sky-800">Ejecutando proyecto: {p.name}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5"
+          onClick={clearActiveTask}
+          title="Detener ejecución"
         >
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -53,7 +74,7 @@ export function ActiveTaskBadge() {
         variant="ghost"
         size="icon"
         className="h-5 w-5"
-        onClick={clear}
+        onClick={clearActiveTask}
         title="Salir de modo edición"
       >
         <X className="h-3.5 w-3.5" />

@@ -73,4 +73,4 @@ export const useInventory = create<InventoryState>((set, get) => ({
   clear: () => set({ products: [] }),
 }));
 
-registerServerStore("midas:v1:inventory", useInventory, (state) => ({ products: state.products }));
+registerServerStore("midas:v1:inventory", useInventory, (state) => ({ products: state.products }), { shared: true });

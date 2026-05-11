@@ -27,4 +27,4 @@ export const useClients = create<ClientsState>((set, get) => ({
   },
 }));
 
-registerServerStore("midas:v1:clients", useClients, (state) => ({ clients: state.clients }));
+registerServerStore("midas:v1:clients", useClients, (state) => ({ clients: state.clients }), { shared: true });

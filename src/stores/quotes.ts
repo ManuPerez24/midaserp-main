@@ -6,6 +6,7 @@ import type { Product, Quote, QuoteEvent, QuoteEventKind, QuoteLine, QuoteStatus
 interface QuotesState {
   quotes: Quote[];
   create: (clientId: string, folio: string) => Quote;
+  clone: (id: string, newFolio: string) => Quote;
   update: (id: string, patch: Partial<Quote>) => void;
   setStatus: (id: string, status: QuoteStatus) => void;
   remove: (id: string) => void;
@@ -16,7 +17,7 @@ interface QuotesState {
   updateLineQty: (quoteId: string, productId: string, quantity: number) => void;
   updateLineDiscount: (quoteId: string, productId: string, percent: number) => void;
   updateLinePrice: (quoteId: string, productId: string, price: number) => void;
-  updateLineFields: (quoteId: string, productId: string, patch: Partial<Pick<QuoteLine, "name" | "description" | "unit">>) => void;
+  updateLineFields: (quoteId: string, productId: string, patch: Partial<QuoteLine>) => void;
   setGlobalDiscount: (id: string, percent: number) => void;
   setValidUntil: (id: string, iso: string | null) => void;
   applyTemplate: (quoteId: string, tpl: { lines: QuoteLine[]; notes?: string; commentary?: string; globalDiscountPercent?: number; validityDays?: number }) => void;
@@ -59,6 +60,23 @@ export const useQuotes = create<QuotesState>((set, get) => ({
     };
     set({ quotes: [q, ...get().quotes] });
     return q;
+  },
+  clone: (id, newFolio) => {
+    const q = get().quotes.find((x) => x.id === id);
+    if (!q) throw new Error("Cotización no encontrada");
+    const now = new Date().toISOString();
+    const newQuote: Quote = {
+      ...q,
+      id: uuid(),
+      folio: newFolio,
+      status: "Pendiente",
+      createdAt: now,
+      updatedAt: now,
+      events: [{ id: uuid(), at: now, kind: "created", message: `Cotización ${newFolio} clonada de ${q.folio}` }],
+      validUntil: null, // Reiniciamos vigencia
+    };
+    set({ quotes: [newQuote, ...get().quotes] });
+    return newQuote;
   },
   update: (id, patch) =>
     set({

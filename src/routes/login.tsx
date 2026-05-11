@@ -7,7 +7,7 @@ import { login } from "@/util/auth.functions";
 import { getPublicBranding } from "@/util/branding.functions";
 import { useAuth } from "@/stores/auth";
 import { toast } from "sonner";
-import { Package, Boxes, Wrench, ClipboardList, Truck, Users, BarChart3, Sparkles } from "lucide-react";
+import { Cpu, Zap, Gauge, Plug, Cable, Factory, Server, Power } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   loader: async () => await getPublicBranding(),
@@ -15,14 +15,14 @@ export const Route = createFileRoute("/login")({
 });
 
 const FLOATING_ICONS = [
-  { Icon: Package, x: 12, y: 18, depth: 30, size: 56, rotate: -8 },
-  { Icon: Boxes, x: 78, y: 22, depth: 50, size: 72, rotate: 12 },
-  { Icon: Wrench, x: 18, y: 72, depth: 40, size: 48, rotate: 18 },
-  { Icon: ClipboardList, x: 82, y: 75, depth: 35, size: 60, rotate: -14 },
-  { Icon: Truck, x: 8, y: 45, depth: 60, size: 64, rotate: 6 },
-  { Icon: Users, x: 88, y: 50, depth: 55, size: 52, rotate: -10 },
-  { Icon: BarChart3, x: 30, y: 12, depth: 25, size: 44, rotate: 22 },
-  { Icon: Sparkles, x: 68, y: 88, depth: 45, size: 40, rotate: -20 },
+  { Icon: Cpu, x: 12, y: 18, depth: 30, size: 56, rotate: -8 },
+  { Icon: Gauge, x: 78, y: 22, depth: 50, size: 72, rotate: 12 },
+  { Icon: Cable, x: 18, y: 72, depth: 40, size: 48, rotate: 18 },
+  { Icon: Plug, x: 82, y: 75, depth: 35, size: 60, rotate: -14 },
+  { Icon: Zap, x: 8, y: 45, depth: 60, size: 64, rotate: 6 },
+  { Icon: Factory, x: 88, y: 50, depth: 55, size: 52, rotate: -10 },
+  { Icon: Server, x: 30, y: 12, depth: 25, size: 44, rotate: 22 },
+  { Icon: Power, x: 68, y: 88, depth: 45, size: 40, rotate: -20 },
 ];
 
 function LoginPage() {
@@ -152,7 +152,7 @@ function LoginPage() {
               />
             ) : (
               <div className="inline-flex items-center justify-center mb-4">
-                <Package className="w-24 h-24 text-primary drop-shadow-xl" strokeWidth={1.5} />
+                <Factory className="w-24 h-24 text-primary drop-shadow-xl" strokeWidth={1.5} />
               </div>
             )}
             <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">

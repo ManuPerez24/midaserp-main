@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuotes } from "@/stores/quotes";
+import { useInventory } from "@/stores/inventory";
+import { useSettings } from "@/stores/settings";
 import { useClients } from "@/stores/clients";
 import type { Quote, QuoteStatus } from "@/lib/types";
 
@@ -45,6 +47,9 @@ export function QuoteEditDialog({
   const setStatus = useQuotes((s) => s.setStatus);
   const setGlobalDiscount = useQuotes((s) => s.setGlobalDiscount);
   const setValidUntil = useQuotes((s) => s.setValidUntil);
+  const products = useInventory((s) => s.products);
+  const updateProduct = useInventory((s) => s.update);
+  const settings = useSettings((s) => s.settings);
 
   const [clientId, setClientId] = useState(quote.clientId);
   const [status, setStatusLocal] = useState<QuoteStatus>(quote.status);
@@ -77,7 +82,26 @@ export function QuoteEditDialog({
 
   const save = () => {
     update(quote.id, { clientId, commentary, notes });
-    if (status !== quote.status) setStatus(quote.id, status);
+    if (status !== quote.status) {
+      setStatus(quote.id, status);
+      const isNowClosed = status === "Aceptada" || status === "Cerrada";
+      const wasClosed = quote.status === "Aceptada" || quote.status === "Cerrada";
+      if ((settings as any).inventory?.enableStock) {
+        if (isNowClosed && !wasClosed) {
+          quote.lines.forEach((l) => {
+            const p = products.find((x) => x.id === l.productId);
+            if (p) updateProduct(p.id, { stock: ((p as any).stock || 0) - l.quantity } as any);
+          });
+          toast.success("Stock descontado");
+        } else if (!isNowClosed && wasClosed) {
+          quote.lines.forEach((l) => {
+            const p = products.find((x) => x.id === l.productId);
+            if (p) updateProduct(p.id, { stock: ((p as any).stock || 0) + l.quantity } as any);
+          });
+          toast.success("Stock restaurado");
+        }
+      }
+    }
     const iso = validUntilStr
       ? new Date(validUntilStr + "T23:59:59").toISOString()
       : null;

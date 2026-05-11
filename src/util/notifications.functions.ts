@@ -2,8 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { users } from "../server/db.server";
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
-
 const KIND_LABEL: Record<string, string> = {
   info: "Información",
   success: "Éxito",
@@ -50,10 +48,9 @@ export const sendNotificationEmail = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
     const resendKey = process.env.RESEND_API_KEY;
-    if (!apiKey || !resendKey) {
-      console.warn("[email] Missing keys, skipping notification email");
+    if (!resendKey) {
+      console.warn("[email] Missing RESEND_API_KEY, skipping notification email");
       return { sent: 0 };
     }
 
@@ -70,12 +67,11 @@ export const sendNotificationEmail = createServerFn({ method: "POST" })
     await Promise.all(
       emails.map(async (to) => {
         try {
-          const res = await fetch(`${GATEWAY_URL}/emails`, {
+          const res = await fetch(`https://api.resend.com/emails`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-              "X-Connection-Api-Key": resendKey,
+              Authorization: `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
               from: "MIDAS ERP <onboarding@resend.dev>",

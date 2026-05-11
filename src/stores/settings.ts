@@ -32,9 +32,19 @@ export const defaultMenuGroups: MenuGroup[] = [
       { id: "inventario", label: "Inventario", icon: "Package" },
       { id: "kits", label: "Kits", icon: "Boxes" },
       { id: "cotizaciones", label: "Cotizaciones", icon: "FileText" },
+      { id: "proyectos", label: "Proyectos", icon: "HardHat" },
       { id: "cotizaciones-proveedores", label: "Cot. Proveedores", icon: "Tag" },
+      { id: "compras", label: "Compras", icon: "ShoppingCart" },
       { id: "clientes", label: "Clientes", icon: "Users" },
       { id: "recordatorios", label: "Recordatorios", icon: "Star" },
+    ],
+  },
+  {
+    id: "admin",
+    label: "Administración",
+    items: [
+      { id: "usuarios", label: "Usuarios", icon: "ShieldCheck" },
+      { id: "audit-log", label: "Log de Auditoría", icon: "History" },
     ],
   },
 ];
@@ -49,7 +59,7 @@ const defaultSettings: AppSettings = {
     logoDataUrl: null,
   },
   branding: {
-    siteName: "MIDAS ERP",
+    siteName: "COMPANY ERP",
     siteTagline: "ERP ligero",
     primaryColor: "#3b82f6",
     accentColor: "#0f1b3d",
@@ -58,7 +68,7 @@ const defaultSettings: AppSettings = {
     showDecoBackground: true,
     defaultCurrency: "MXN",
     dateFormat: "DD/MM/YYYY",
-    theme: "sistema",
+    theme: "oscuro",
   },
   pdf: {
     headerColor: "#3b82f6",
@@ -69,6 +79,12 @@ const defaultSettings: AppSettings = {
     pageSize: "LETTER",
     showQr: true,
     paymentTerms: "",
+    template: "modern",
+    showPhotos: true,
+    showSku: true,
+    showDiscount: true,
+    showNotes: true,
+    layout: ["header", "client", "table", "totals", "notes", "terms"],
   },
   folio: {
     prefix: "COT-",
@@ -79,10 +95,10 @@ const defaultSettings: AppSettings = {
   categories: [],
   suppliers: [],
   ai: {
-    provider: "lovable",
+    provider: "openai",
     apiKey: "",
-    model: "google/gemini-2.5-flash",
-    baseUrl: "",
+    model: "gpt-4o-mini",
+    baseUrl: "https://api.openai.com/v1",
     systemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
     userPrompt: DEFAULT_AI_USER_PROMPT,
   },
@@ -100,10 +116,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
       settings: {
         ...get().settings,
         ai: {
-          provider: get().settings.ai?.provider ?? "lovable",
-          model: get().settings.ai?.model ?? "google/gemini-2.5-flash",
+          provider: get().settings.ai?.provider ?? "openai",
+          model: get().settings.ai?.model ?? "gpt-4o-mini",
           apiKey: get().settings.ai?.apiKey ?? "",
-          baseUrl: get().settings.ai?.baseUrl ?? "",
+          baseUrl: get().settings.ai?.baseUrl ?? "https://api.openai.com/v1",
           ...patch,
         },
       },

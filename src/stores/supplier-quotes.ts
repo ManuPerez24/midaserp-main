@@ -30,4 +30,4 @@ export const useSupplierQuotes = create<State>((set, get) => ({
     }),
 }));
 
-registerServerStore("midas:v1:supplier-quotes", useSupplierQuotes, (state) => ({ quotes: state.quotes }));
+registerServerStore("midas:v1:supplier-quotes", useSupplierQuotes, (state) => ({ quotes: state.quotes }), { shared: true });

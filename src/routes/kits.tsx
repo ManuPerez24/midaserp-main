@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Pencil, Plus, Trash2, Send, X, Search } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Send, X, Search, MoreHorizontal, Boxes } from "lucide-react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,14 +34,16 @@ import { useInventory } from "@/stores/inventory";
 import { useActiveTask, requestActivateKit, clearActiveTask } from "@/stores/active-task";
 import { useLocksStore } from "@/stores/locks";
 import { useAuth } from "@/stores/auth";
+import { logAction } from "@/stores/audit-log";
 import { useQuotes } from "@/stores/quotes";
 import { formatMoney } from "@/lib/utils";
 import type { Kit, Currency } from "@/lib/types";
 import { PageGuard } from "@/components/page-guard";
 import { useCan } from "@/lib/use-can";
+import { useSettings } from "@/stores/settings";
 
 export const Route = createFileRoute("/kits")({
-  head: () => ({ meta: [{ title: "Kits · MIDAS ERP" }] }),
+  head: () => ({ meta: [{ title: `Kits · ${useSettings.getState().settings.branding.siteName}` }] }),
   component: () => (
     <PageGuard permission="page:kits">
       <KitsPage />
@@ -86,6 +89,94 @@ function KitForm({
   );
 }
 
+function RadialMenuOverlay({
+  open,
+  coords,
+  onClose,
+  actions,
+}: {
+  open: boolean;
+  coords: { x: number; y: number };
+  onClose: () => void;
+  actions: {
+    label: string;
+    icon: React.ReactNode;
+    onClick: () => void;
+    color?: string;
+    disabled?: boolean;
+    isPrimary?: boolean;
+  }[];
+}) {
+  if (!open || typeof document === "undefined") return null;
+
+  const validActions = actions.filter((a) => !a.disabled);
+  const sortedActions = [...validActions].sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-background/20 backdrop-blur-[1px] animate-in fade-in duration-200"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      {sortedActions.map((a, i) => {
+        const angle = (i / sortedActions.length) * 360 - 90;
+        const radius = 75;
+        const x = coords.x + Math.cos((angle * Math.PI) / 180) * radius;
+        const y = coords.y + Math.sin((angle * Math.PI) / 180) * radius;
+        const sizeClass = a.isPrimary ? "h-14 w-14" : "h-11 w-11";
+        const iconWrapperClass = a.isPrimary ? "[&>svg]:h-6 [&>svg]:w-6" : "";
+        return (
+          <div
+            key={i}
+            className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center animate-in zoom-in duration-300 hover:z-50"
+            style={{
+              left: x,
+              top: y,
+              animationFillMode: "both",
+              animationDelay: `${i * 15}ms`,
+            }}
+          >
+            <button
+              aria-label={a.label}
+              onClick={(e) => {
+                e.stopPropagation();
+                a.onClick();
+                onClose();
+              }}
+              className={`peer flex ${sizeClass} items-center justify-center rounded-full bg-background border shadow-xl transition-all hover:scale-110 ${
+                a.color || "text-foreground hover:text-primary"
+              }`}
+            >
+              <div className={iconWrapperClass}>{a.icon}</div>
+            </button>
+            <span className="pointer-events-none absolute top-[calc(100%+8px)] opacity-0 transition-opacity peer-hover:opacity-100 whitespace-nowrap rounded-md bg-popover/95 backdrop-blur-sm px-2 py-1 text-[11px] font-medium text-popover-foreground shadow-md border">
+              {a.label}
+            </span>
+          </div>
+        );
+      })}
+      <div
+        className="absolute -translate-x-1/2 -translate-y-1/2 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-110 transition-transform animate-in zoom-in duration-200"
+        style={{ left: coords.x, top: coords.y }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        title="Cerrar menú"
+      >
+        <X className="h-5 w-5" />
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function KitsPage() {
   const kits = useKits((s) => s.kits);
   const addKit = useKits((s) => s.add);
@@ -113,6 +204,12 @@ function KitsPage() {
   const [productSearch, setProductSearch] = useState("");
   const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
   const [draftItems, setDraftItems] = useState<Kit["items"]>([]);
+  const [menuState, setMenuState] = useState<{ open: boolean; x: number; y: number; kit: Kit | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    kit: null,
+  });
 
   const canCreate = useCan("kits:create");
   const canEdit = useCan("kits:edit");
@@ -124,6 +221,19 @@ function KitsPage() {
     return !!h && h.userId !== currentUserId;
   };
   const lockHolder = (kitId: string) => lockMap[`kit:${kitId}`] ?? null;
+
+  // Keyboard shortcut: 'n' creates new
+  useEffect(() => {
+    const onNew = () => {
+      if (canCreate) setCreateOpen(true);
+    };
+    window.addEventListener("app:new", onNew);
+    if (sessionStorage.getItem("autoOpenCreate") === "true" && canCreate) {
+      sessionStorage.removeItem("autoOpenCreate");
+      setCreateOpen(true);
+    }
+    return () => window.removeEventListener("app:new", onNew);
+  }, [canCreate]);
 
   const viewKit = useMemo(
     () => kits.find((k) => k.id === viewKitId) ?? null,
@@ -192,6 +302,8 @@ function KitsPage() {
       const stillExists = draftItems.some((draft) => draft.productId === item.productId);
       if (!stillExists) {
         removeKitItem(viewKit.id, item.productId);
+        const p = productById(item.productId);
+        logAction("kit:item-remove", `Producto '${p?.name}' eliminado de kit '${viewKit.name}'.`);
       }
     });
 
@@ -227,6 +339,54 @@ function KitsPage() {
     }
   };
 
+  const getKitActions = (k: Kit) => {
+    const blocked = isLockedByOther(k.id);
+    return [
+      ...(canEdit
+        ? [
+            active?.kind === "kit" && active.id === k.id
+              ? {
+                  label: "Salir de modo edición",
+                  icon: <X className="h-4 w-4" />,
+                  onClick: () => clearActiveTask(),
+                  color: "text-amber-600",
+                  isPrimary: true,
+                }
+              : {
+                  label: "Activar / editar",
+                  icon: <Pencil className="h-4 w-4" />,
+                  onClick: () => activateKit(k),
+                  disabled: blocked,
+                  color: "text-emerald-600",
+                  isPrimary: true,
+                },
+          ]
+        : []),
+      {
+        label: "Inyectar a cotización activa",
+        icon: <Send className="h-4 w-4" />,
+        onClick: () => injectKit(k),
+        disabled: !active || active.kind !== "quote" || k.items.length === 0,
+        color: "text-primary",
+      },
+      {
+        label: "Detalles / agregar productos",
+        icon: <Eye className="h-4 w-4" />,
+        onClick: () => setViewKitId(k.id),
+        color: "text-blue-500",
+      },
+      ...(canDelete
+        ? [{
+            label: "Eliminar",
+            icon: <Trash2 className="h-4 w-4" />,
+            onClick: () => setDeleteKit(k),
+            disabled: blocked,
+            color: "text-destructive hover:bg-destructive/10",
+          }]
+        : []),
+    ];
+  };
+
   const handleAddProductToKit = (productId: string) => {
     if (!viewKit) return;
     const qty = parseInt(qtyMap[productId] || "1", 10);
@@ -237,6 +397,7 @@ function KitsPage() {
     addKitItem(viewKit.id, productId, qty);
     const p = productById(productId);
     toast.success(`+${qty} ${p?.name ?? ""} agregado al kit`);
+    logAction("kit:item-add", `Producto '${p?.name}' añadido a kit '${viewKit.name}'.`);
     setQtyMap((m) => ({ ...m, [productId]: "1" }));
   };
 
@@ -252,6 +413,21 @@ function KitsPage() {
       <DataTable
         rows={kits}
         rowKey={(k) => k.id}
+        onRowClick={(e, k) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, a, label, [role='checkbox']")) return;
+
+          let cx = e.clientX;
+          let cy = e.clientY;
+
+          const margin = 160;
+          if (cx + margin > window.innerWidth) cx = window.innerWidth - margin;
+          if (cx - margin < 0) cx = margin;
+          if (cy + margin > window.innerHeight) cy = window.innerHeight - margin;
+          if (cy - margin < 0) cy = margin;
+
+          setMenuState({ open: true, x: cx, y: cy, kit: k });
+        }}
         searchPlaceholder="Buscar kits..."
         searchAccessor={(k) => `${k.name} ${k.description}`}
         toolbar={
@@ -288,31 +464,40 @@ function KitsPage() {
             sortable: true,
             accessor: (k) => k.name,
             cell: (k) => (
-              <div>
-                <div className="font-medium">{k.name}</div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 shadow-sm">
+                  <Boxes className="h-5 w-5" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-sm truncate text-foreground">{k.name}</span>
                 {k.description && (
-                  <div className="text-xs text-muted-foreground line-clamp-1">{k.description}</div>
+                    <span className="text-[11px] text-muted-foreground truncate mt-0.5" title={k.description}>{k.description}</span>
                 )}
+                </div>
               </div>
             ),
           },
           {
             key: "items",
-            header: "Items",
+            header: "Componentes",
             sortable: true,
             accessor: (k) => k.items.length,
-            cell: (k) => <Badge variant="secondary">{k.items.length} ítems</Badge>,
+            cell: (k) => (
+              <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wider bg-background">
+                {k.items.length} {k.items.length === 1 ? 'ítem' : 'ítems'}
+              </Badge>
+            ),
           },
           {
             key: "total",
-            header: "Total",
+            header: "Valor Total",
             sortable: true,
             accessor: (k) => {
               const t = kitTotals(k);
               return Object.values(t).reduce((a, b) => a + b, 0);
             },
             cell: (k) => (
-              <span className="font-medium tabular-nums">{formatTotals(kitTotals(k))}</span>
+              <span className="font-bold text-foreground tabular-nums">{formatTotals(kitTotals(k))}</span>
             ),
           },
           {
@@ -320,9 +505,15 @@ function KitsPage() {
             header: "Estado",
             cell: (k) =>
               active?.kind === "kit" && active.id === k.id ? (
-                <Badge>activo</Badge>
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Activo</span>
+                </div>
               ) : (
-                <span className="text-xs text-muted-foreground">—</span>
+                <span className="text-xs font-medium text-muted-foreground">—</span>
               ),
           },
           {
@@ -342,63 +533,22 @@ function KitsPage() {
                       🔒 {holder.userName ?? holder.userEmail}
                     </span>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setViewKitId(k.id)}
-                    title="Detalles / agregar productos"
-                  >
-                    <Eye className="h-4 w-4" />
+                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-muted rounded-full" title="Menú Radial" onClick={(e) => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); let cx = rect.left + rect.width / 2; let cy = rect.top + rect.height / 2; const margin = 160; if (cx + margin > window.innerWidth) cx = window.innerWidth - margin; if (cx - margin < 0) cx = margin; if (cy + margin > window.innerHeight) cy = window.innerHeight - margin; if (cy - margin < 0) cy = margin; setMenuState({ open: true, x: cx, y: cy, kit: k }); }}>
+                    <span className="sr-only">Abrir menú</span>
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground transition-transform hover:scale-110" />
                   </Button>
-                  {canEdit && (active?.kind === "kit" && active.id === k.id ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => clearActiveTask()}
-                      title="Salir de modo edición"
-                    >
-                      <X className="mr-1 h-3 w-3" /> Cerrar
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={blocked}
-                      onClick={() => activateKit(k)}
-                      title={blocked ? "En edición por otro usuario" : "Activar / editar"}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-primary"
-                    onClick={() => injectKit(k)}
-                    title="Inyectar a cotización activa"
-                    disabled={!active || active.kind !== "quote" || k.items.length === 0}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      disabled={blocked}
-                      onClick={() => setDeleteKit(k)}
-                      title={blocked ? "En edición por otro usuario" : "Eliminar"}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </div>
               );
             },
           },
         ]}
+      />
+
+      <RadialMenuOverlay
+        open={menuState.open}
+        coords={{ x: menuState.x, y: menuState.y }}
+        onClose={() => setMenuState((prev) => ({ ...prev, open: false }))}
+        actions={menuState.kit ? getKitActions(menuState.kit) : []}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -416,6 +566,7 @@ function KitsPage() {
               setCreateOpen(false);
               setViewKitId(k.id);
               toast.success(`Kit "${k.name}" creado`);
+              logAction("kit:create", `Kit '${k.name}' creado.`);
             }}
           />
         </DialogContent>
@@ -590,6 +741,7 @@ function KitsPage() {
                 updateKit(editKit.id, data);
                 setEditKit(null);
                 toast.success("Kit actualizado");
+                logAction("kit:update", `Kit '${data.name}' actualizado.`);
               }}
             />
           )}
@@ -612,6 +764,7 @@ function KitsPage() {
                   if (active?.kind === "kit" && active.id === deleteKit.id) await clearActiveTask();
                   removeKit(deleteKit.id);
                   toast.success("Kit eliminado");
+                  logAction("kit:delete", `Kit '${deleteKit.name}' eliminado.`);
                   setDeleteKit(null);
                 }
               }}
@@ -638,6 +791,7 @@ function KitsPage() {
                 setSelected(new Set());
                 setBulkOpen(false);
                 toast.success("Kits eliminados");
+                logAction("kit:bulk-delete", `${selected.size} kits eliminados masivamente.`);
               }}
             >
               Eliminar

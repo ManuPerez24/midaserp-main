@@ -20,7 +20,12 @@ import {
   ExternalLink,
   FileEdit,
   RefreshCw,
+  MoreHorizontal,
+  Kanban,
+  Copy,
+  X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +47,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -64,6 +78,7 @@ import { useInventory } from "@/stores/inventory";
 import { requestActivateQuote } from "@/stores/active-task";
 import { useLocksStore } from "@/stores/locks";
 import { useAuth } from "@/stores/auth";
+import { logAction } from "@/stores/audit-log";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { Quote, QuoteEvent, QuoteStatus } from "@/lib/types";
 import { generateQrDataUrl, quoteVerifyUrl } from "@/lib/qr";
@@ -73,13 +88,100 @@ import { PageGuard } from "@/components/page-guard";
 import { useCan } from "@/lib/use-can";
 
 export const Route = createFileRoute("/cotizaciones")({
-  head: () => ({ meta: [{ title: "Cotizaciones · MIDAS ERP" }] }),
+  head: () => ({ meta: [{ title: `Cotizaciones · ${useSettings.getState().settings.branding.siteName}` }] }),
   component: () => (
     <PageGuard permission="page:cotizaciones">
       <QuotesPage />
     </PageGuard>
   ),
 });
+
+function RadialMenuOverlay({
+  open,
+  coords,
+  onClose,
+  actions,
+}: {
+  open: boolean;
+  coords: { x: number; y: number };
+  onClose: () => void;
+  actions: {
+    label: string;
+    icon: React.ReactNode;
+    onClick: () => void;
+    color?: string;
+    isPrimary?: boolean;
+  }[];
+}) {
+  if (!open || typeof document === "undefined") return null;
+
+  // Manda la acción primaria al índice 0 (parte superior del círculo)
+  const sortedActions = [...actions].sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-background/20 backdrop-blur-[1px] animate-in fade-in duration-200"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      {sortedActions.map((a, i) => {
+        const angle = (i / sortedActions.length) * 360 - 90;
+        const radius = 75;
+        const x = coords.x + Math.cos((angle * Math.PI) / 180) * radius;
+        const y = coords.y + Math.sin((angle * Math.PI) / 180) * radius;
+        const sizeClass = a.isPrimary ? "h-14 w-14" : "h-11 w-11";
+        const iconWrapperClass = a.isPrimary ? "[&>svg]:h-6 [&>svg]:w-6" : "";
+        return (
+          <div
+            key={i}
+            className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center animate-in zoom-in duration-300 hover:z-50"
+            style={{
+              left: x,
+              top: y,
+              animationFillMode: "both",
+              animationDelay: `${i * 15}ms`,
+            }}
+          >
+            <button
+              aria-label={a.label}
+              onClick={(e) => {
+                e.stopPropagation();
+                a.onClick();
+                onClose();
+              }}
+              className={`peer flex ${sizeClass} items-center justify-center rounded-full bg-background border shadow-xl transition-all hover:scale-110 ${
+                a.color || "text-foreground hover:text-primary"
+              }`}
+            >
+              <div className={iconWrapperClass}>{a.icon}</div>
+            </button>
+            <span className="pointer-events-none absolute top-[calc(100%+8px)] opacity-0 transition-opacity peer-hover:opacity-100 whitespace-nowrap rounded-md bg-popover/95 backdrop-blur-sm px-2 py-1 text-[11px] font-medium text-popover-foreground shadow-md border">
+              {a.label}
+            </span>
+          </div>
+        );
+      })}
+      <div
+        className="absolute -translate-x-1/2 -translate-y-1/2 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-110 transition-transform animate-in zoom-in duration-200"
+        style={{ left: coords.x, top: coords.y }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        title="Cerrar menú"
+      >
+        <X className="h-5 w-5" />
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const statusVariant: Record<QuoteStatus, string> = {
   Pendiente: "bg-amber-100 text-amber-800 border-amber-200",
@@ -104,7 +206,6 @@ function groupTimelineEvents(events: QuoteEvent[]): QuoteEvent[][] {
     if (
       last &&
       lastEv &&
-      lastEv.kind === ev.kind &&
       new Date(ev.at).getTime() - new Date(lastEv.at).getTime() < 5 * 60 * 1000
     ) {
       last.push(ev);
@@ -118,14 +219,17 @@ function groupTimelineEvents(events: QuoteEvent[]): QuoteEvent[][] {
 function QuotesPage() {
   const quotes = useQuotes((s) => s.quotes);
   const createQuote = useQuotes((s) => s.create);
+  const cloneQuote = useQuotes((s) => s.clone);
   const removeQuote = useQuotes((s) => s.remove);
   const removeManyQuotes = useQuotes((s) => s.removeMany);
   const setStatus = useQuotes((s) => s.setStatus);
   const updateLinePrice = useQuotes((s) => s.updateLinePrice);
+  const updateQuote = useQuotes((s) => s.update);
 
   const clients = useClients((s) => s.clients);
   const settings = useSettings((s) => s.settings);
   const products = useInventory((s) => s.products);
+  const updateProduct = useInventory((s) => s.update);
   const consumeFolio = useSettings((s) => s.consumeFolio);
   
   const [createOpen, setCreateOpen] = useState(false);
@@ -135,11 +239,19 @@ function QuotesPage() {
   const [timelineQ, setTimelineQ] = useState<Quote | null>(null);
   const [editQ, setEditQ] = useState<Quote | null>(null);
   const [purchaseQ, setPurchaseQ] = useState<Quote | null>(null);
+  const [rejectQ, setRejectQ] = useState<Quote | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [contentEditQ, setContentEditQ] = useState<Quote | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [qrUrl, setQrUrl] = useState<string | undefined>(undefined);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [menuState, setMenuState] = useState<{ open: boolean; x: number; y: number; quote: Quote | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    quote: null,
+  });
 
   const canCreate = useCan("cotizaciones:create");
   const canEdit = useCan("cotizaciones:edit");
@@ -152,6 +264,19 @@ function QuotesPage() {
     return !!h && h.userId !== currentUserId;
   };
   const lockHolder = (qid: string) => lockMap[`quote:${qid}`] ?? null;
+
+  // Keyboard shortcut: 'n' creates new
+  useEffect(() => {
+    const onNew = () => {
+      if (canCreate) setCreateOpen(true);
+    };
+    window.addEventListener("app:new", onNew);
+    if (sessionStorage.getItem("autoOpenCreate") === "true" && canCreate) {
+      sessionStorage.removeItem("autoOpenCreate");
+      setCreateOpen(true);
+    }
+    return () => window.removeEventListener("app:new", onNew);
+  }, [canCreate]);
 
   // Generate QR for the open preview
   useEffect(() => {
@@ -262,6 +387,156 @@ function QuotesPage() {
     window.location.assign(`/cotizaciones/${encodeURIComponent(id)}`);
   };
 
+  const handleExportCSV = () => {
+    const headers = ["Folio", "Cliente", "Estado", "Total", "Moneda", "Fecha"];
+    const csvRows = quotes.map((q) => {
+      const c = clients.find((x) => x.id === q.clientId);
+      const total = quoteTotal(q, settings.issuer.ivaPercent);
+      const currency = q.lines[0]?.currency ?? "MXN";
+      return [
+        `"${q.folio.replace(/"/g, '""')}"`,
+        `"${(c?.receiver || "").replace(/"/g, '""')}"`,
+        `"${q.status.replace(/"/g, '""')}"`,
+        total.toFixed(2),
+        currency,
+        new Date(q.createdAt).toLocaleDateString(),
+      ].join(",");
+    });
+    const csv = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cotizaciones-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const changeStatus = (q: Quote, next: QuoteStatus, reason?: string) => {
+    const prev = q.status;
+    if (prev === next) return;
+    
+    setStatus(q.id, next);
+    if (reason) {
+      updateQuote(q.id, { notes: (q.notes ? q.notes + "\n\n" : "") + "Motivo de rechazo: " + reason });
+    }
+
+    const isNowClosed = next === "Aceptada" || next === "Cerrada";
+    const wasClosed = prev === "Aceptada" || prev === "Cerrada";
+
+    if ((settings as any).inventory?.enableStock) {
+      if (isNowClosed && !wasClosed) {
+        q.lines.forEach((l) => {
+          const p = products.find((x) => x.id === l.productId);
+          if (p) updateProduct(p.id, { stock: ((p as any).stock || 0) - l.quantity } as any);
+        });
+        toast.success("Stock descontado");
+      } else if (!isNowClosed && wasClosed) {
+        q.lines.forEach((l) => {
+          const p = products.find((x) => x.id === l.productId);
+          if (p) updateProduct(p.id, { stock: ((p as any).stock || 0) + l.quantity } as any);
+        });
+        toast.success("Stock restaurado");
+      }
+    }
+
+    if (next === "Aceptada") {
+      notify("success", `${q.folio} aceptada`, `/cotizaciones/${q.id}`);
+    } else if (next === "Rechazada") {
+      notify("warning", `${q.folio} rechazada`, `/cotizaciones/${q.id}`);
+    }
+  };
+
+  const getQuoteActions = (q: Quote) => {
+    const blocked = isLockedByOther(q.id);
+    return [
+      ...(canEdit && !blocked ? [{
+        label: "Activar / editar líneas",
+        icon: <Pencil className="h-4 w-4" />,
+        color: "text-emerald-600",
+        isPrimary: true,
+        onClick: async () => {
+          if (await requestActivateQuote(q.id)) {
+            toast.success(`Cotización ${q.folio} activa`);
+          }
+        },
+      }] : []),
+      ...(canEdit && !blocked && q.lines.length > 0 ? [{
+        label: "Editar contenido",
+        icon: <FileEdit className="h-4 w-4" />,
+        color: "text-amber-600",
+        onClick: () => setContentEditQ(q),
+      }] : []),
+      ...(canEdit && !blocked ? [{
+        label: "Modificar metadatos",
+        icon: <Settings2 className="h-4 w-4" />,
+        color: "text-slate-600",
+        onClick: () => setEditQ(q),
+      }] : []),
+      ...(canEdit && !blocked && q.lines.length > 0 ? [{
+        label: "Actualizar precios",
+        icon: <RefreshCw className="h-4 w-4" />,
+        color: "text-sky-600",
+        onClick: () => {
+          let updated = 0;
+          let missing = 0;
+          for (const l of q.lines) {
+            const p = products.find((x) => x.id === l.productId);
+            if (!p) {
+              missing++;
+              continue;
+            }
+            if (p.price !== l.unitPrice) {
+              updateLinePrice(q.id, l.productId, p.price);
+              updated++;
+            }
+          }
+          if (updated === 0 && missing === 0) {
+            toast.info("Los precios ya están actualizados");
+          } else {
+            toast.success(
+              `Precios actualizados: ${updated} línea(s)${missing ? ` · ${missing} sin producto en inventario` : ""}`
+            );
+          }
+        },
+      }] : []),
+      {
+        label: "Previsualización",
+        icon: <Eye className="h-4 w-4" />,
+        color: "text-blue-500",
+        onClick: () => setPreviewQ(q),
+      },
+      {
+        label: "Línea de tiempo",
+        icon: <History className="h-4 w-4" />,
+        color: "text-purple-500",
+        onClick: () => setTimelineQ(q),
+      },
+      ...(q.lines.length > 0 ? [{
+        label: "Compras por proveedor",
+        icon: <ShoppingCart className="h-4 w-4" />,
+        color: "text-teal-500",
+        onClick: () => setPurchaseQ(q),
+      }] : []),
+      ...(canCreate ? [{
+        label: "Duplicar cotización",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => {
+          const folio = consumeFolio();
+          cloneQuote(q.id, folio);
+          toast.success(`Cotización duplicada como ${folio}`);
+          logAction("quote:clone", `Cotización '${q.folio}' duplicada como '${folio}'.`);
+        },
+      }] : []),
+      ...(canDelete && !blocked ? [{
+        label: "Eliminar",
+        icon: <Trash2 className="h-4 w-4" />,
+        color: "text-destructive hover:bg-destructive/10",
+        onClick: () => setDeleteQ(q),
+      }] : []),
+    ];
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -274,6 +549,22 @@ function QuotesPage() {
       <DataTable
         rows={quotes}
         rowKey={(q) => q.id}
+        onRowClick={(e, q) => {
+          // Evitar que el menú se abra si hacemos clic en botones, checkboxes o selectores
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, a, label, [role='checkbox'], select, [role='combobox']")) return;
+
+          let cx = e.clientX;
+          let cy = e.clientY;
+
+          const margin = 160;
+          if (cx + margin > window.innerWidth) cx = window.innerWidth - margin;
+          if (cx - margin < 0) cx = margin;
+          if (cy + margin > window.innerHeight) cy = window.innerHeight - margin;
+          if (cy - margin < 0) cy = margin;
+
+          setMenuState({ open: true, x: cx, y: cy, quote: q });
+        }}
         searchPlaceholder="Buscar por folio o cliente..."
         searchAccessor={(q) => {
           const c = clients.find((x) => x.id === q.clientId);
@@ -286,6 +577,15 @@ function QuotesPage() {
                 <Trash2 className="mr-2 h-4 w-4" /> Eliminar ({selected.size})
               </Button>
             )}
+            <Button variant="outline" onClick={handleExportCSV}>
+              <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/kanban"><Kanban className="mr-2 h-4 w-4" /> Vista Kanban</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/compras"><ShoppingCart className="mr-2 h-4 w-4" /> Órdenes de compra</Link>
+            </Button>
             {canCreate && (
               <Button disabled={clients.length === 0} onClick={() => setCreateOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" /> Nueva cotización
@@ -327,7 +627,7 @@ function QuotesPage() {
             header: "Folio",
             sortable: true,
             accessor: (q) => q.folio,
-            cell: (q) => <span className="font-mono font-semibold">{q.folio}</span>,
+          cell: (q) => <Link to="/cotizaciones/$id" params={{ id: q.id }} className="font-mono font-bold text-primary hover:underline">{q.folio}</Link>,
           },
           {
             key: "client",
@@ -357,12 +657,10 @@ function QuotesPage() {
                 disabled={!canStatus}
                 onValueChange={(v) => {
                   const next = v as QuoteStatus;
-                  if (next === q.status) return;
-                  setStatus(q.id, next);
-                  if (next === "Aceptada") {
-                    notify("success", `${q.folio} aceptada`, `/cotizaciones/${q.id}`);
-                  } else if (next === "Rechazada") {
-                    notify("warning", `${q.folio} rechazada`, `/cotizaciones/${q.id}`);
+                  if (next === "Rechazada" && q.status !== "Rechazada") {
+                    setRejectQ(q);
+                  } else {
+                    changeStatus(q, next);
                   }
                 }}
               >
@@ -428,126 +726,26 @@ function QuotesPage() {
                   )}
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Abrir detalle"
-                    onClick={() => openQuoteDetail(q.id)}
+                    className="h-8 w-8 p-0 hover:bg-muted rounded-full"
+                    title="Menú Radial"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      let cx = rect.left + rect.width / 2;
+                      let cy = rect.top + rect.height / 2;
+
+                      const margin = 160;
+                      if (cx + margin > window.innerWidth) cx = window.innerWidth - margin;
+                      if (cx - margin < 0) cx = margin;
+                      if (cy + margin > window.innerHeight) cy = window.innerHeight - margin;
+                      if (cy - margin < 0) cy = margin;
+
+                      setMenuState({ open: true, x: cx, y: cy, quote: q });
+                    }}
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <span className="sr-only">Abrir menú</span>
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground transition-transform hover:scale-110" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Ver previsualización"
-                    onClick={() => setPreviewQ(q)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Línea de tiempo"
-                    onClick={() => setTimelineQ(q)}
-                  >
-                    <History className="h-4 w-4" />
-                  </Button>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={blocked}
-                      title={blocked ? "En edición por otro usuario" : "Modificar"}
-                      onClick={() => setEditQ(q)}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={blocked || q.lines.length === 0}
-                      title={blocked ? "En edición por otro usuario" : "Editar contenido"}
-                      onClick={() => setContentEditQ(q)}
-                    >
-                      <FileEdit className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={blocked || q.lines.length === 0}
-                      title={blocked ? "En edición por otro usuario" : "Actualizar precios"}
-                      onClick={() => {
-                        let updated = 0;
-                        let missing = 0;
-                        for (const l of q.lines) {
-                          const p = products.find((x) => x.id === l.productId);
-                          if (!p) {
-                            missing++;
-                            continue;
-                          }
-                          if (p.price !== l.unitPrice) {
-                            updateLinePrice(q.id, l.productId, p.price);
-                            updated++;
-                          }
-                        }
-                        if (updated === 0 && missing === 0) {
-                          toast.info("Los precios ya están actualizados");
-                        } else {
-                          toast.success(
-                            `Precios actualizados: ${updated} línea(s)${missing ? ` · ${missing} sin producto en inventario` : ""}`
-                          );
-                        }
-                      }}
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Compras por proveedor"
-                    disabled={q.lines.length === 0}
-                    onClick={() => setPurchaseQ(q)}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                  </Button>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={blocked}
-                      title={blocked ? "En edición por otro usuario" : "Activar / editar líneas"}
-                      onClick={async () => {
-                        if (await requestActivateQuote(q.id)) {
-                          toast.success(`Cotización ${q.folio} activa`);
-                        }
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      disabled={blocked}
-                      onClick={() => setDeleteQ(q)}
-                      title={blocked ? "En edición por otro usuario" : "Eliminar"}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </div>
               );
             },
@@ -562,8 +760,7 @@ function QuotesPage() {
             <DialogDescription>
               Folio:{" "}
               <span className="font-mono">
-                {settings.folio.prefix}
-                {settings.folio.nextNumber.toString().padStart(settings.folio.pad, "0")}
+                {settings.folio.prefix}{String(settings.folio.nextNumber).padStart(settings.folio.pad, "0")}
               </span>
             </DialogDescription>
           </DialogHeader>
@@ -586,73 +783,24 @@ function QuotesPage() {
 
             {(() => {
               const c = clients.find((x) => x.id === selectedClient);
-              if (!c) {
-                return (
-                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    Selecciona un cliente para ver su información.
-                  </div>
-                );
-              }
-              const previous = quotes.filter((q) => q.clientId === c.id);
-              const totalCount = previous.length;
-              const totalAmount = previous.reduce(
-                (acc, q) =>
-                  acc +
-                  q.lines.reduce((a, l) => a + l.unitPrice * l.quantity, 0) *
-                    (1 + settings.issuer.ivaPercent / 100),
+              if (!c) return null;
+              const qs = quotes.filter((q) => q.clientId === c.id);
+              const totalAmount = qs.reduce(
+                (sum, q) => sum + quoteTotal(q, settings.issuer.ivaPercent),
                 0
               );
-              const currency = previous[0]?.lines[0]?.currency ?? "MXN";
+              const currency = qs[0]?.lines[0]?.currency ?? "MXN";
               return (
-                <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-1.5 text-base font-semibold">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        {c.receiver}
-                      </p>
-                      {c.company ? (
-                        <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <Building2 className="h-3.5 w-3.5" />
-                          {c.company}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Badge variant="secondary" className="shrink-0">
-                      {totalCount} cotiz.
-                    </Badge>
+                <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                  <div className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
+                    Resumen del cliente
                   </div>
-                  <div className="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
-                    {c.email ? (
-                      <a
-                        href={`mailto:${c.email}`}
-                        className="flex items-center gap-1.5 hover:text-foreground"
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                        <span className="truncate">{c.email}</span>
-                      </a>
-                    ) : null}
-                    {c.phone ? (
-                      <a
-                        href={`tel:${c.phone}`}
-                        className="flex items-center gap-1.5 hover:text-foreground"
-                      >
-                        <Phone className="h-3.5 w-3.5" />
-                        {c.phone}
-                      </a>
-                    ) : null}
-                    {c.address ? (
-                      <p className="flex items-start gap-1.5 sm:col-span-2">
-                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>{c.address}</span>
-                      </p>
-                    ) : null}
+                  <div>
+                    {qs.length} cotizaciones históricas
                   </div>
-                  {totalCount > 0 ? (
-                    <div className="flex items-center justify-between border-t pt-2 text-xs">
-                      <span className="text-muted-foreground">
-                        Histórico ({totalCount} cotizaciones)
-                      </span>
+                  {qs.length > 0 ? (
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-muted-foreground">Total cotizado:</span>
                       <span className="font-semibold">
                         {formatMoney(totalAmount, currency)}
                       </span>
@@ -871,6 +1019,40 @@ function QuotesPage() {
           onOpenChange={(o) => !o && setContentEditQ(null)}
         />
       ) : null}
+
+      <Dialog open={!!rejectQ} onOpenChange={(o) => !o && setRejectQ(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Motivo de rechazo</DialogTitle>
+            <DialogDescription>
+              ¿Por qué se rechazó la cotización {rejectQ?.folio}? (Opcional)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Ej: Precio alto, se fue con la competencia, tiempo de entrega..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectQ(null)}>Cancelar</Button>
+            <Button onClick={() => {
+              if (rejectQ) changeStatus(rejectQ, "Rechazada", rejectReason);
+              setRejectQ(null);
+              setRejectReason("");
+            }}>Confirmar rechazo</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <RadialMenuOverlay
+        open={menuState.open}
+        coords={{ x: menuState.x, y: menuState.y }}
+        onClose={() => setMenuState((prev) => ({ ...prev, open: false }))}
+        actions={menuState.quote ? getQuoteActions(menuState.quote) : []}
+      />
     </div>
   );
 }

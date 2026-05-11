@@ -6,7 +6,7 @@ const InputSchema = z.object({
   text: z.string().max(200_000).optional(),
   imageDataUrl: z.string().max(15_000_000).optional(), // base64 data URL
   supplierHint: z.string().max(200).optional(),
-  provider: z.enum(["lovable", "openai", "custom"]).optional(),
+  provider: z.enum(["openai", "custom"]).optional(),
   apiKey: z.string().max(500).optional(),
   model: z.string().max(200).optional(),
   baseUrl: z.string().url().max(500).optional(),
@@ -41,9 +41,8 @@ REGLAS DE ORO:
 export const analyzeSupplierQuote = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
   .handler(async ({ data }) => {
-    const provider = data.provider ?? "lovable";
-    const userKey = data.apiKey?.trim();
-    const apiKey = userKey || (provider === "lovable" ? process.env.LOVABLE_API_KEY : undefined);
+    const provider = data.provider ?? "openai";
+    const apiKey = data.apiKey?.trim();
     
     const systemPrompt = data.systemPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT;
     const rawUserPrompt = data.userPrompt?.trim() || DEFAULT_AI_USER_PROMPT;
@@ -55,20 +54,20 @@ export const analyzeSupplierQuote = createServerFn({ method: "POST" })
     if (!apiKey) {
       return {
         ok: false as const,
-        error: provider === "lovable" 
-          ? "LOVABLE_API_KEY no configurado." 
-          : "Falta API Key.",
+        error: "Falta configurar la API Key de IA en los Ajustes.",
       };
     }
 
+    let customBase = data.baseUrl?.trim().replace(/\/+$/, "") || "";
+    if (customBase.endsWith("/chat/completions")) {
+      customBase = customBase.replace(/\/chat\/completions$/, "");
+    }
     const endpoint =
       provider === "openai"
         ? "https://api.openai.com/v1/chat/completions"
-        : provider === "custom"
-          ? (data.baseUrl?.replace(/\/+$/, "") || "") + "/chat/completions"
-          : "https://ai.gateway.lovable.dev/v1/chat/completions";
+        : customBase + "/chat/completions";
 
-    const model = data.model?.trim() || (provider === "openai" ? "gpt-4o-mini" : "google/gemini-2.0-flash");
+    const model = data.model?.trim() || "gpt-4o-mini";
 
     if (!data.text && !data.imageDataUrl) {
       return { ok: false as const, error: "Proporciona texto o imagen" };

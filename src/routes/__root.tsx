@@ -1,5 +1,6 @@
-import { Outlet, createRootRoute, HeadContent, Scripts, Link, useLocation } from "@tanstack/react-router";
-import { Cloud, Settings as SettingsIcon } from "lucide-react";
+import { Outlet, createRootRoute, HeadContent, Scripts, Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Cloud, Settings as SettingsIcon, Bell } from "lucide-react";
+import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -16,6 +17,11 @@ import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
 import { AuthGate } from "@/components/auth-gate";
 import { UserMenu } from "@/components/user-menu";
+import { useQuotes } from "@/stores/quotes";
+import { useInventory } from "@/stores/inventory";
+import { useReminders } from "@/stores/reminders";
+import { notify } from "@/stores/notifications";
+import { GlobalChat } from "@/components/global-chat";
 
 
 
@@ -40,23 +46,24 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MIDAS ERP Lite" },
-      { name: "description", content: "ERP ligero: cotizaciones, inventario, kits y clientes." },
-      { property: "og:title", content: "MIDAS ERP Lite" },
-      { name: "twitter:title", content: "MIDAS ERP Lite" },
-      { property: "og:description", content: "ERP ligero: cotizaciones, inventario, kits y clientes." },
-      { name: "twitter:description", content: "ERP ligero: cotizaciones, inventario, kits y clientes." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e67375f-e630-4c83-9985-cb3c04bcafc0/id-preview-4c978d5f--27a74fb8-f89d-43d0-ac81-5ad8db188bee.lovable.app-1777764763264.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e67375f-e630-4c83-9985-cb3c04bcafc0/id-preview-4c978d5f--27a74fb8-f89d-43d0-ac81-5ad8db188bee.lovable.app-1777764763264.png" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:type", content: "website" },
-    ],
-    links: [{ rel: "stylesheet", href: appCss }],
-  }),
+  head: () => {
+    const siteName = useSettings.getState().settings.branding.siteName || "MIDAS ERP";
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: siteName },
+        { name: "description", content: `ERP ligero: cotizaciones, inventario, kits y clientes de ${siteName}.` },
+        { property: "og:title", content: siteName },
+        { name: "twitter:title", content: siteName },
+        { property: "og:description", content: `ERP ligero: cotizaciones, inventario, kits y clientes de ${siteName}.` },
+        { name: "twitter:description", content: `ERP ligero: cotizaciones, inventario, kits y clientes de ${siteName}.` },
+        { name: "twitter:card", content: "summary_large_image" },
+        { property: "og:type", content: "website" },
+      ],
+      links: [{ rel: "stylesheet", href: appCss }],
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -109,11 +116,69 @@ function RootComponent() {
   );
 }
 
+function ProactiveNotifications() {
+  const quotes = useQuotes((s) => s.quotes);
+  const reminders = useReminders((s) => s.reminders);
+  const products = useInventory((s) => s.products);
+  const settings = useSettings((s) => s.settings);
+
+  useEffect(() => {
+    const notified = new Set(JSON.parse(sessionStorage.getItem("notified") || "[]"));
+    const now = Date.now();
+    let changed = false;
+
+    reminders.forEach((r) => {
+      if (!r.done) {
+        const due = new Date(r.dueDate).getTime();
+        if (due < now && !notified.has("rem_overdue_" + r.id)) {
+          notify("error", `Recordatorio vencido: ${r.note}`, "/recordatorios");
+          notified.add("rem_overdue_" + r.id);
+          changed = true;
+        } else if (due - now > 0 && due - now < 86400000 * 2 && !notified.has("rem_soon_" + r.id)) {
+          notify("warning", `Recordatorio próximo: ${r.note}`, "/recordatorios");
+          notified.add("rem_soon_" + r.id);
+          changed = true;
+        }
+      }
+    });
+
+    quotes.forEach((q) => {
+      if ((q.status === "Pendiente" || q.status === "En Proceso") && q.validUntil) {
+        const due = new Date(q.validUntil).getTime();
+        if (due < now && !notified.has("q_exp_" + q.id)) {
+          notify("error", `Cotización ${q.folio} vencida`, `/cotizaciones/${q.id}`);
+          notified.add("q_exp_" + q.id);
+          changed = true;
+        } else if (due - now > 0 && due - now < 86400000 * 3 && !notified.has("q_soon_" + q.id)) {
+          notify("warning", `Cotización ${q.folio} por vencer pronto`, `/cotizaciones/${q.id}`);
+          notified.add("q_soon_" + q.id);
+          changed = true;
+        }
+      }
+    });
+
+    if ((settings as any).inventory?.enableStock) {
+      products.forEach((p) => {
+        if (p.minStock !== undefined && (p.stock ?? 0) <= p.minStock && !notified.has("stock_low_" + p.id)) {
+          notify("warning", `Stock bajo: ${p.name} (${p.stock}/${p.minStock})`, "/inventario");
+          notified.add("stock_low_" + p.id);
+          changed = true;
+        }
+      });
+    }
+
+    if (changed) sessionStorage.setItem("notified", JSON.stringify([...notified]));
+  }, [quotes, reminders, products, settings]);
+
+  return null;
+}
+
 function RootLayout() {
   const branding = useSettings((s) => s.settings.branding);
   const user = useAuth((s) => s.user);
   const isAdmin = !!user?.isAdmin;
   const showDeco = branding.showDecoBackground !== false;
+  const pathname = useLocation({ select: (l) => l.pathname });
 
   return (
     <div className="min-h-screen flex w-full bg-background">
@@ -139,15 +204,16 @@ function RootLayout() {
           )}
           <UserMenu />
         </header>
-        <main className="relative flex-1 p-4 sm:p-6">
-          <div className="relative z-10">
+        <main className="relative flex-1 p-4 sm:p-6 overflow-x-hidden">
+          <div key={pathname} className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
             <Outlet />
           </div>
           {showDeco ? <DecoBackground /> : null}
         </main>
       </div>
       <Toaster position="bottom-right" richColors />
+      <ProactiveNotifications />
+      <GlobalChat />
     </div>
   );
 }
-

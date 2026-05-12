@@ -41,7 +41,8 @@ Integrado inicialmente en el módulo de Proyectos. Es un gestor documental estil
 - **`/cotizaciones`:** Motor de ventas. Creación de cotizaciones, gestión de estados (Pendiente, Aceptada, Rechazada), exportación a PDF (Logística y Cliente), generación de QR de autenticidad y pedidos a proveedores (Compras).
 - **`/kits`:** Creador de agrupaciones de productos. Los kits son reutilizables y pueden "Inyectarse" directamente en una cotización activa.
 - **`/clientes`:** Directorio CRM. Guarda contactos, visualiza estadísticas de ventas (Ficha 360°), recordatorios y adjunta archivos al expediente del cliente.
-- **`/proyectos`:** Módulo puente entre ventas y ejecución. Gestiona levantamientos, almacenamiento documental, vinculación financiera de cotizaciones, Tarea Activa para consumo de inventario y un Kanban nativo. Cuenta con un **Dashboard Inmersivo Dinámico** que dibuja el Cronograma (Gantt) a pantalla completa usando *CSS Grid* puro para el posicionamiento temporal, barras de progreso de dos tonos y un motor nativo SVG para dibujar rutas de dependencia en "codo" (90°).
+- **`/proyectos`:** Módulo puente entre ventas y ejecución. Gestiona el ciclo de vida completo (Levantamiento -> Presupuesto -> Planeación -> Ejecución -> Completado) con disparadores automáticos de tareas, almacenamiento documental, vinculación de cotizaciones y Tarea Activa. Cuenta con un **Dashboard Inmersivo Dinámico** que dibuja el Cronograma (Gantt) a pantalla completa con soporte para manipulación directa interactiva (Drag & Move, Resize, Dependencias Interactivas SVG, Selección Múltiple con `Ctrl+Click` para mover/borrar en bloque, Filtros Inteligentes y Ruta Crítica). El **Kanban Nativo** y el **Gantt** comparten un motor unificado de **Modales Inmersivos a pantalla completa** (`gantt-task-modals.tsx`), divididos en dos columnas: detalles y evidencias a la izquierda, y un **Roadmap Multimedia (Línea de Tiempo)** a la derecha que audita cada cambio. Por sanidad de arquitectura, todos los modales se encuentran extraídos en rutas independientes.
+- **`/ayuda`:** Centro de ayuda y base de conocimiento interactiva integrada en el sistema. Proporciona guías de inicio rápido, explicación de los paradigmas UX (Tarea Activa, Menú Radial, Paleta de Comandos), atajos de teclado y glosario.
 - **`/ajustes`:** Módulo exclusivo para Administradores. Controla el branding, perfil fiscal, IA, seguridad por PIN, respaldos locales y el **Motor de PDFs** (Creador visual Drag & Drop, selección de plantillas y visibilidad de columnas dinámicas).
 
 ---
@@ -78,7 +79,7 @@ El ERP no depende de proveedores preconfigurados forzosos (se eliminó la depend
    - **Capacidad:** Puede responder preguntas sobre stock, precios, generar cálculos de ventas, y devolver enlaces interactivos a módulos específicos.
 2. **Extracción por OCR (`analyzeSupplierQuote`):** 
    - Permite subir un PDF o Imagen de un proveedor.
-   - Transcribe la cotización y empareja (Fuzzy Match) los productos extraídos con el catálogo de `useInventory`, permitiendo actualizar precios o crear nuevos productos masivamente.
+   - Transcribe la cotización y empareja (Fuzzy Match) los productos extraídos con el catálogo de `useInventory`, permitiendo actualizar precios o crear nuevos productos masivamente. **Soporta re-análisis con instrucciones de corrección del usuario (Prompting en caliente)** en caso de que la IA cometa errores de formato.
 3. **Termómetro de Ventas (`analyzeRejectionsWithAi`):**
    - Analiza las notas y motivos de rechazo de las cotizaciones perdidas. Extrae las palabras clave (ej. "Caro", "Competencia") y calcula un índice de salud del negocio (0 al 100).
 4. **Cross-Selling (Sugerencias):**
@@ -137,3 +138,77 @@ Esto garantiza:
 1. Funcionamiento inmediato e infalible (cero dependencia de la regeneración del servidor).
 2. Transiciones instantáneas sin recargas del navegador.
 3. Una experiencia de usuario idéntica a la de navegar a una "página dedicada".
+
+---
+
+## 10. Especificaciones Técnicas de Componentes Clave
+
+### A. Modal Inmersivo de Edición de Tareas (`ProjectTaskEditModal`)
+Ubicado en `src/routes/gantt-task-modals.tsx`. Este componente es una obra maestra de UI/UX diseñada para reemplazar los aburridos formularios de tareas por una experiencia de pantalla completa. Si alguna vez se necesita recrear, estas son sus directrices estructurales exactas:
+
+#### 1. Dimensiones y Contenedor Principal
+- **Layout:** Ocupa casi toda la pantalla usando clases Tailwind precisas: `w-[99vw] max-w-[1800px] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden bg-background rounded-xl`.
+- **Estructura Interna:** Un `DialogHeader` superior estático, un cuerpo central dinámico que toma todo el espacio restante (`flex-1`), y un `DialogFooter` inferior estático.
+
+#### 2. Cabecera (Header)
+- **Izquierda:** Título de la tarea flanqueado por un icono dinámico según el estado (`CheckCircle` esmeralda para Completado, `Clock` azul para En Progreso, `Clock` gris para Pendiente). 
+- **Derecha:** Un `Badge` inamovible que muestra el estado actual de la tarea y refleja los mismos colores.
+
+#### 3. Cuerpo: Diseño a Dos Columnas (Split Layout)
+El contenedor central usa un grid que se divide en pantallas grandes: `grid grid-cols-1 lg:grid-cols-2`.
+
+**Columna Izquierda (Formulario y Evidencias):**
+Contenedor scrolleable (`overflow-y-auto`) que agrupa la información en tarjetas (`Card`).
+1. **Top - Dos tarjetas paralelas (Detalles y Programación):**
+   - *Detalles:* Título, Descripción, Responsable (usa un datalist `system-users-list` para autocompletar) y Fase/Grupo (usa un datalist `group-suggestions`).
+   - *Programación:* Los campos de Fecha y Hora están divididos por compatibilidad cross-browser usando `<Input type="date">` y `<Input type="time">` lado a lado. Almacenan estados locales temporales antes de unirse en un formato ISO.
+2. **Bottom - Tarjeta Ancha (Estado y Entrega):**
+   - Cambia su color de fondo dinámicamente (`bg-emerald-50/30` o `bg-blue-50/30`) basándose en el estado seleccionado.
+   - *Trigger Automático de Fechas:* Si el usuario cambia el Select a "Completado", el sistema inyecta la fecha y hora actuales en "Fecha/Hora de Fin" y dispara un Toast informativo. Si selecciona "En Progreso", auto-rellena la "Fecha/Hora de Inicio".
+   - *Carga de Evidencias:* Un componente drag-and-drop (`<input type="file" multiple>`). Muestra un grid de miniaturas (`h-14 w-14`) de fotos subidas previamente y fotos nuevas, con un botón flotante de borrado (`Trash2`).
+
+**Columna Derecha (Roadmap Histórico):**
+Una tarjeta vertical (`Card min-h-[400px]`) que actúa como bitácora de auditoría.
+- **Cabecera Sticky:** "Roadmap (Historial)" anclado arriba con fondo difuminado (`backdrop-blur-sm sticky top-0 z-20`).
+- **Línea de Tiempo Central:** Una línea vertical asimétrica en móviles y perfectamente centrada en PC (`absolute left-5 xl:left-1/2 top-0 bottom-0 w-[3px]`).
+- **Alternancia Visual (Zig-Zag):** Recorre el array `task.history` en reversa. Utiliza el índice `isEven` (`i % 2 === 0`) para alinear el contenido a la izquierda o derecha en pantallas `xl` (`xl:flex-row-reverse` vs `xl:flex-row`), creando un diseño de línea de tiempo hermoso.
+- **Índices y Colores:** Dibuja un círculo numérico por cada paso. Asigna un color iterativo (`timelineColors = ["bg-orange-500", "bg-yellow-500", "bg-teal-500", ...]`) usando el módulo del índice (`i % timelineColors.length`).
+- **Snapshots (Cápsulas de tiempo):** Si el historial guardó un `snapshot`, renderiza una caja con fondo secundario. Si hay comentarios, van en cursiva. Si hay fotos, dibuja las miniaturas en cuadrícula. Si la imagen se previsualiza, al hacer hover (`group-hover`) aparece un icono de descarga y al darle clic lanza la descarga real del archivo en otra pestaña.
+
+#### 4. Footer y Lógica de Guardado (Save Engine)
+- Botón de Borrar (Izquierda - Lanza un `AlertDialog` anidado por seguridad).
+- Botón Cancelar y Botón Guardar.
+- **Secuencia de Guardado (`handleSave`):**
+  1. Bloquea la UI (`setSaving(true)`).
+  2. Muestra un `toast.loading` si hay evidencias nuevas.
+  3. Convierte todos los archivos locales a Base64 y los envía mediante la función de servidor nativa (`useServerFn(uploadProjectFiles)`).
+  4. Recibe las URLs reales del servidor y las concatena a `uploadedUrls`.
+  5. Crea una copia de `task.history`. Si el estado cambió, inyecta un nuevo paso de historia. Si se subieron fotos o se cambiaron los comentarios de entrega, inyecta otro paso con la metadata de la cápsula (`snapshot: { comments, photos, files }`).
+  6. Compone el objeto Tarea final, busca su coincidencia en el array de tareas de `useProjects` y lo reemplaza inmutablemente.
+  7. Llama a `updateProject()`, limpia los modales y devuelve el estado visual de éxito.
+
+### B. Motor de Confirmación de Reprogramación Interactiva (Gantt)
+Utilizado a través de los estados `confirmDrag` (Fases) y `confirmTaskDrag` (Tareas). Para otorgar un nivel de confianza empresarial, cualquier desplazamiento visual (`deltaMs > 60000` / 1 minuto) detiene el motor y exige confirmación.
+
+#### Componente Visual: Caja de Desplazamiento (Delta Box)
+Diseñado para ilustrar cognitivamente el impacto en el tiempo antes de modificar la base de datos.
+- **UI Clases Base:** `border rounded-md p-3 bg-primary/10 border-primary/20 flex flex-col items-center justify-center py-4 text-center`
+- **Comportamiento Lógico:**
+  - Detecta la variable diferencial en milisegundos (`deltaMs = currentStartMs - initialStartMs`).
+  - Transforma el formato humano `Math.round(deltaMs / 3600000)` para representarlo en **Horas**.
+  - Si es mayor a cero, antepone el signo matemático de empuje `+`.
+- **Distribución Dual (Para tareas únicas):** 
+  - Coloca el *Delta Box* centrado y ancho en la parte superior.
+  - Divide la parte inferior con un CSS Grid (`grid grid-cols-2 gap-4`), mostrando el "Inicio/Fin Original" a la izquierda (Fondo Gris `bg-muted/20`) y el "Nuevo Inicio/Fin" a la derecha (Fondo de acento `bg-primary/10`).
+
+Este patrón debe replicarse si alguna vez se programa un sistema de manipulación del tiempo en calendarios, bitácoras CRM, o fechas de entrega de Cotizaciones.
+
+### C. Motor de Exportación WYSIWYG (Gantt a PDF/PNG)
+El Diagrama de Gantt incluye una función de captura de alta fidelidad que exporta exactamente lo que el usuario ve en pantalla (Filtros, Nivel de Zoom actual y Nodos expandidos).
+- **Estrategia:** Renderizado del DOM a Canvas (`html2canvas`) y posteriormente inyección en un contenedor PDF (`jsPDF`) o descarga directa como imagen `image/png`.
+- **Optimización (Lazy Loading):** Para evitar bloquear el hilo principal y aumentar el tamaño del bundle inicial, los módulos de captura se cargan dinámicamente:
+  ```javascript
+  const html2canvasModule = await import('html2canvas');
+  const { jsPDF } = await import('jspdf');
+  ```
+- **Manejo de Zoom:** El usuario puede usar la herramienta de "Ajustar" pantalla, y la captura calculará el ancho real del `scroll-container` para renderizar el formato en orientación Apaisada (Landscape) u Horizontal según la relación de aspecto generada.

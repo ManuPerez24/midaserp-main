@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Package, FileText, Users, Boxes, Search, Info, TerminalSquare, Calculator, Settings, PlusCircle } from "lucide-react";
+import { Package, FileText, Users, Boxes, Search, Info, TerminalSquare, Calculator, Settings, PlusCircle, CloudUpload } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -15,16 +15,22 @@ import { useInventory } from "@/stores/inventory";
 import { useClients } from "@/stores/clients";
 import { useKits } from "@/stores/kits";
 import { useQuotes } from "@/stores/quotes";
+import { useSettings } from "@/stores/settings";
+import { saveUserData } from "@/util/sync.functions";
+import { toast } from "sonner";
+import { logAction } from "@/stores/audit-log";
 
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
   const navigate = useNavigate();
 
   const products = useInventory((s) => s.products);
   const clients = useClients((s) => s.clients);
   const kits = useKits((s) => s.kits);
   const quotes = useQuotes((s) => s.quotes);
+  const settings = useSettings((s) => s.settings);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -44,6 +50,24 @@ export function GlobalSearch() {
     setOpen(false);
     setSearch(""); // Limpiar al navegar
     navigate({ to: path });
+  };
+
+  const handleForceSync = async () => {
+    setOpen(false);
+    setSearch("");
+    setIsSyncing(true);
+    const toastId = toast.loading("Sincronizando datos con la nube...");
+    try {
+      await saveUserData({
+        data: { store: "midas:v1:settings", data: { settings }, shared: true },
+      });
+      toast.success("Sincronización manual completada", { id: toastId });
+      logAction("system:sync", "Sincronización manual forzada a la base de datos desde Paleta de Comandos.");
+    } catch (error) {
+      toast.error("Error al sincronizar con la nube", { id: toastId });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const topProducts = useMemo(() => products.slice(0, 50), [products]);
@@ -92,6 +116,15 @@ export function GlobalSearch() {
               <span className="text-muted-foreground text-sm">
                 Busca un producto por SKU, un cliente por nombre, o navega entre módulos.
               </span>
+            </CommandItem>
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          <CommandGroup heading="Sistema">
+            <CommandItem onSelect={handleForceSync} disabled={isSyncing}>
+              <CloudUpload className="mr-2 h-4 w-4" />
+              <span>{isSyncing ? "Sincronizando..." : "Sincronizar a la Nube (Force Sync)"}</span>
             </CommandItem>
           </CommandGroup>
 

@@ -10,6 +10,7 @@ import { v4 as uuid } from "uuid";
 import { toast } from "sonner";
 import { Trash2, CheckCircle, Clock, UploadCloud, History as HistoryIcon, Download, File, User, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useServerFn } from "@tanstack/react-start";
@@ -162,6 +163,8 @@ export function ProjectTaskEditModal({ open, onClose, project, task }: { open: b
   const [existingPhotos, setExistingPhotos] = useState<any[]>([]);
   const [comments, setComments] = useState("");
   const [saving, setSaving] = useState(false);
+  const [subtasks, setSubtasks] = useState<{id: string, title: string, done: boolean}[]>([]);
+  const [newSubtask, setNewSubtask] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const uploadFilesFn = useServerFn(uploadProjectFiles);
 
@@ -186,6 +189,8 @@ export function ProjectTaskEditModal({ open, onClose, project, task }: { open: b
       setExistingPhotos(task.evidence || []);
       setEvidencePhotos([]);
       setComments(task.comments || "");
+      setSubtasks(task.subtasks || []);
+      setNewSubtask("");
     }
   }, [open, task]);
 
@@ -251,6 +256,7 @@ export function ProjectTaskEditModal({ open, onClose, project, task }: { open: b
           group,
           evidence: uploadedUrls,
           comments,
+          subtasks,
           history: historyLog
         };
       }
@@ -337,6 +343,39 @@ export function ProjectTaskEditModal({ open, onClose, project, task }: { open: b
                 </Card>
               </div>
               
+              {/* CHECKLIST / SUBTAREAS */}
+              <Card className="shrink-0 animate-in fade-in slide-in-from-top-2">
+                <CardHeader className="py-3 px-4 border-b">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Checklist <Badge variant="secondary" className="ml-auto font-mono">{subtasks.filter(s=>s.done).length}/{subtasks.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {subtasks.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {subtasks.map(st => (
+                        <div key={st.id} className="flex items-start justify-between group gap-2">
+                          <label className="flex items-start gap-2 cursor-pointer flex-1 min-w-0">
+                            <Checkbox checked={st.done} onCheckedChange={(c) => setSubtasks(prev => prev.map(s => s.id === st.id ? {...s, done: !!c} : s))} className="mt-0.5" />
+                            <span className={`text-sm leading-tight break-words ${st.done ? 'line-through text-muted-foreground' : ''}`}>{st.title}</span>
+                          </label>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => setSubtasks(prev => prev.filter(s => s.id !== st.id))}><Trash2 className="h-3.5 w-3.5"/></Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input placeholder="Añadir un paso a realizar..." value={newSubtask} onChange={e => setNewSubtask(e.target.value)} onKeyDown={e => {
+                      if(e.key === 'Enter') {
+                        e.preventDefault();
+                        if(newSubtask.trim()) { setSubtasks([...subtasks, {id: uuid(), title: newSubtask.trim(), done: false}]); setNewSubtask(''); }
+                      }
+                    }} />
+                    <Button variant="secondary" onClick={() => { if(newSubtask.trim()) { setSubtasks([...subtasks, {id: uuid(), title: newSubtask.trim(), done: false}]); setNewSubtask(''); } }}>Añadir</Button>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card className={`flex-1 flex flex-col min-h-0 ${status === 'Completado' ? 'border-emerald-200 bg-emerald-50/30 dark:bg-emerald-950/10' : status === 'En Progreso' ? 'border-blue-200 bg-blue-50/30 dark:bg-blue-950/10' : ''}`}>
                 <CardHeader className="py-3 px-4 border-b shrink-0"><CardTitle className="text-base">Estado y Entrega</CardTitle></CardHeader>
                 <CardContent className="flex flex-col xl:flex-row gap-4 p-4 overflow-hidden min-h-0">

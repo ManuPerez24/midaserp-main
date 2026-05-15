@@ -1,91 +1,78 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { users } from "../server/db.server";
 
-const KIND_LABEL: Record<string, string> = {
-  info: "Información",
-  success: "Éxito",
-  warning: "Advertencia",
-  error: "Error",
-};
-
-const KIND_COLOR: Record<string, string> = {
-  info: "#0ea5e9",
-  success: "#10b981",
-  warning: "#f59e0b",
-  error: "#ef4444",
-};
-
-function renderHtml(kind: string, message: string, link?: string) {
-  const color = KIND_COLOR[kind] ?? "#0ea5e9";
-  const label = KIND_LABEL[kind] ?? "Notificación";
-  const linkBlock = link
-    ? `<p style="margin:24px 0 0;"><a href="${link}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px;">Ver en MIDAS ERP</a></p>`
-    : "";
-  return `<!doctype html>
-<html><body style="margin:0;background:#f5f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-  <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">
-    <div style="background:${color};color:#fff;padding:18px 24px;font-size:14px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;">MIDAS ERP · ${label}</div>
-    <div style="padding:28px 24px;color:#111;font-size:15px;line-height:1.55;">
-      <p style="margin:0;">${escapeHtml(message)}</p>
-      ${linkBlock}
-    </div>
-    <div style="padding:14px 24px;color:#888;font-size:12px;border-top:1px solid #eee;">Notificación automática · MIDAS ERP</div>
-  </div>
-</body></html>`;
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
-
-export const sendNotificationEmail = createServerFn({ method: "POST" })
-  .inputValidator(
+export const sendPushNotification = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
     z.object({
-      kind: z.enum(["info", "success", "warning", "error"]),
-      message: z.string().min(1).max(500),
-      link: z.string().max(500).optional(),
-    }).parse,
+      message: z.string(),
+      telegramToken: z.string().optional().nullable(),
+      telegramChatId: z.string().optional().nullable(),
+      whatsappToken: z.string().optional().nullable(),
+      whatsappPhone: z.string().optional().nullable(),
+    }).parse(d)
   )
   .handler(async ({ data }) => {
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) {
-      console.warn("[email] Missing RESEND_API_KEY, skipping notification email");
-      return { sent: 0 };
+    const results = { telegram: false, whatsapp: false, errors: [] as string[] };
+
+    // 1. Envío Inteligente por Telegram
+    if (data.telegramToken && data.telegramChatId) {
+      try {
+        const url = `https://api.telegram.org/bot${data.telegramToken}/sendMessage`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: data.telegramChatId,
+            text: data.message,
+            parse_mode: "HTML",
+          }),
+        });
+
+        if (response.ok) {
+          results.telegram = true;
+        } else {
+          results.errors.push(`Telegram API Error: ${await response.text()}`);
+        }
+      } catch (error: any) {
+        results.errors.push(`Telegram Network Error: ${error.message}`);
+      }
     }
 
-    const col = await users();
-    const recipients = await col.find({}, { projection: { email: 1 } }).toArray();
-    const emails = recipients.map((u) => u.email).filter(Boolean);
-    if (emails.length === 0) return { sent: 0 };
+    // 2. Envío Empresarial por WhatsApp (Meta Cloud API)
+    if (data.whatsappToken && data.whatsappPhone) {
+      try {
+        // Nota de Arquitectura: La API de Graph de Meta requiere el "Phone Number ID".
+        // Por defecto usamos un placeholder, pero si es necesario puedes concatenarlo en el token
+        // o extraerlo desde las variables de entorno en producción.
+        const PHONE_NUMBER_ID = "TU_PHONE_NUMBER_ID";
+        const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
 
-    const subject = `[${KIND_LABEL[data.kind] ?? "Notificación"}] ${data.message.slice(0, 80)}`;
-    const html = renderHtml(data.kind, data.message, data.link);
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${data.whatsappToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: data.whatsappPhone.replace(/\+/g, ""), // Meta exige el número sin el '+'
+            type: "text",
+            text: { body: data.message },
+          }),
+        });
 
-    let sent = 0;
-    // Send individually to keep it simple and avoid leaking emails in "to" header
-    await Promise.all(
-      emails.map(async (to) => {
-        try {
-          const res = await fetch(`https://api.resend.com/emails`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${resendKey}`,
-            },
-            body: JSON.stringify({
-              from: "MIDAS ERP <onboarding@resend.dev>",
-              to: [to],
-              subject,
-              html,
-            }),
-          });
-          if (res.ok) sent++;
-          else console.warn("[email] failed", to, res.status, await res.text());
-        } catch (err) {
-          console.warn("[email] error", to, err);
+        if (response.ok) {
+          results.whatsapp = true;
+        } else {
+          results.errors.push(`WhatsApp API Error: ${await response.text()}`);
         }
-      }),
-    );
-    return { sent };
+      } catch (error: any) {
+        results.errors.push(`WhatsApp Network Error: ${error.message}`);
+      }
+    }
+
+    return {
+      success: results.telegram || results.whatsapp,
+      results,
+    };
   });

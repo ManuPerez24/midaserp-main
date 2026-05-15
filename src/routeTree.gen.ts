@@ -12,14 +12,19 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 import { Route as RecordatoriosRouteImport } from './routes/recordatorios'
 import { Route as ProyectosRouteImport } from './routes/proyectos'
+import { Route as Ordenes3dRouteImport } from './routes/ordenes-3d'
+import { Route as Logros3dRouteImport } from './routes/logros-3d'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KitsRouteImport } from './routes/kits'
 import { Route as KanbanRouteImport } from './routes/kanban'
 import { Route as InventarioRouteImport } from './routes/inventario'
+import { Route as Impresion3dRouteImport } from './routes/impresion-3d'
+import { Route as Estadisticas3dRouteImport } from './routes/estadisticas-3d'
 import { Route as CotizacionesProveedoresRouteImport } from './routes/cotizaciones-proveedores'
 import { Route as CotizacionesRouteImport } from './routes/cotizaciones'
 import { Route as ComprasRouteImport } from './routes/compras'
 import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as Boveda3dRouteImport } from './routes/boveda-3d'
 import { Route as AyudaRouteImport } from './routes/ayuda'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
 import { Route as AjustesRouteImport } from './routes/ajustes'
@@ -42,6 +47,16 @@ const ProyectosRoute = ProyectosRouteImport.update({
   path: '/proyectos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Ordenes3dRoute = Ordenes3dRouteImport.update({
+  id: '/ordenes-3d',
+  path: '/ordenes-3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Logros3dRoute = Logros3dRouteImport.update({
+  id: '/logros-3d',
+  path: '/logros-3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -62,6 +77,16 @@ const InventarioRoute = InventarioRouteImport.update({
   path: '/inventario',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Impresion3dRoute = Impresion3dRouteImport.update({
+  id: '/impresion-3d',
+  path: '/impresion-3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Estadisticas3dRoute = Estadisticas3dRouteImport.update({
+  id: '/estadisticas-3d',
+  path: '/estadisticas-3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CotizacionesProveedoresRoute = CotizacionesProveedoresRouteImport.update({
   id: '/cotizaciones-proveedores',
   path: '/cotizaciones-proveedores',
@@ -80,6 +105,11 @@ const ComprasRoute = ComprasRouteImport.update({
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Boveda3dRoute = Boveda3dRouteImport.update({
+  id: '/boveda-3d',
+  path: '/boveda-3d',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyudaRoute = AyudaRouteImport.update({
@@ -118,14 +148,19 @@ export interface FileRoutesByFullPath {
   '/ajustes': typeof AjustesRoute
   '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
+  '/boveda-3d': typeof Boveda3dRoute
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
+  '/estadisticas-3d': typeof Estadisticas3dRoute
+  '/impresion-3d': typeof Impresion3dRoute
   '/inventario': typeof InventarioRoute
   '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/logros-3d': typeof Logros3dRoute
+  '/ordenes-3d': typeof Ordenes3dRoute
   '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
@@ -137,14 +172,19 @@ export interface FileRoutesByTo {
   '/ajustes': typeof AjustesRoute
   '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
+  '/boveda-3d': typeof Boveda3dRoute
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
+  '/estadisticas-3d': typeof Estadisticas3dRoute
+  '/impresion-3d': typeof Impresion3dRoute
   '/inventario': typeof InventarioRoute
   '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/logros-3d': typeof Logros3dRoute
+  '/ordenes-3d': typeof Ordenes3dRoute
   '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
@@ -157,14 +197,19 @@ export interface FileRoutesById {
   '/ajustes': typeof AjustesRoute
   '/audit-log': typeof AuditLogRoute
   '/ayuda': typeof AyudaRoute
+  '/boveda-3d': typeof Boveda3dRoute
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/cotizaciones': typeof CotizacionesRouteWithChildren
   '/cotizaciones-proveedores': typeof CotizacionesProveedoresRoute
+  '/estadisticas-3d': typeof Estadisticas3dRoute
+  '/impresion-3d': typeof Impresion3dRoute
   '/inventario': typeof InventarioRoute
   '/kanban': typeof KanbanRoute
   '/kits': typeof KitsRoute
   '/login': typeof LoginRoute
+  '/logros-3d': typeof Logros3dRoute
+  '/ordenes-3d': typeof Ordenes3dRoute
   '/proyectos': typeof ProyectosRoute
   '/recordatorios': typeof RecordatoriosRoute
   '/usuarios': typeof UsuariosRoute
@@ -178,14 +223,19 @@ export interface FileRouteTypes {
     | '/ajustes'
     | '/audit-log'
     | '/ayuda'
+    | '/boveda-3d'
     | '/clientes'
     | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
+    | '/estadisticas-3d'
+    | '/impresion-3d'
     | '/inventario'
     | '/kanban'
     | '/kits'
     | '/login'
+    | '/logros-3d'
+    | '/ordenes-3d'
     | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
@@ -197,14 +247,19 @@ export interface FileRouteTypes {
     | '/ajustes'
     | '/audit-log'
     | '/ayuda'
+    | '/boveda-3d'
     | '/clientes'
     | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
+    | '/estadisticas-3d'
+    | '/impresion-3d'
     | '/inventario'
     | '/kanban'
     | '/kits'
     | '/login'
+    | '/logros-3d'
+    | '/ordenes-3d'
     | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
@@ -216,14 +271,19 @@ export interface FileRouteTypes {
     | '/ajustes'
     | '/audit-log'
     | '/ayuda'
+    | '/boveda-3d'
     | '/clientes'
     | '/compras'
     | '/cotizaciones'
     | '/cotizaciones-proveedores'
+    | '/estadisticas-3d'
+    | '/impresion-3d'
     | '/inventario'
     | '/kanban'
     | '/kits'
     | '/login'
+    | '/logros-3d'
+    | '/ordenes-3d'
     | '/proyectos'
     | '/recordatorios'
     | '/usuarios'
@@ -236,14 +296,19 @@ export interface RootRouteChildren {
   AjustesRoute: typeof AjustesRoute
   AuditLogRoute: typeof AuditLogRoute
   AyudaRoute: typeof AyudaRoute
+  Boveda3dRoute: typeof Boveda3dRoute
   ClientesRoute: typeof ClientesRoute
   ComprasRoute: typeof ComprasRoute
   CotizacionesRoute: typeof CotizacionesRouteWithChildren
   CotizacionesProveedoresRoute: typeof CotizacionesProveedoresRoute
+  Estadisticas3dRoute: typeof Estadisticas3dRoute
+  Impresion3dRoute: typeof Impresion3dRoute
   InventarioRoute: typeof InventarioRoute
   KanbanRoute: typeof KanbanRoute
   KitsRoute: typeof KitsRoute
   LoginRoute: typeof LoginRoute
+  Logros3dRoute: typeof Logros3dRoute
+  Ordenes3dRoute: typeof Ordenes3dRoute
   ProyectosRoute: typeof ProyectosRoute
   RecordatoriosRoute: typeof RecordatoriosRoute
   UsuariosRoute: typeof UsuariosRoute
@@ -270,6 +335,20 @@ declare module '@tanstack/react-router' {
       path: '/proyectos'
       fullPath: '/proyectos'
       preLoaderRoute: typeof ProyectosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ordenes-3d': {
+      id: '/ordenes-3d'
+      path: '/ordenes-3d'
+      fullPath: '/ordenes-3d'
+      preLoaderRoute: typeof Ordenes3dRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logros-3d': {
+      id: '/logros-3d'
+      path: '/logros-3d'
+      fullPath: '/logros-3d'
+      preLoaderRoute: typeof Logros3dRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -300,6 +379,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventarioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/impresion-3d': {
+      id: '/impresion-3d'
+      path: '/impresion-3d'
+      fullPath: '/impresion-3d'
+      preLoaderRoute: typeof Impresion3dRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estadisticas-3d': {
+      id: '/estadisticas-3d'
+      path: '/estadisticas-3d'
+      fullPath: '/estadisticas-3d'
+      preLoaderRoute: typeof Estadisticas3dRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cotizaciones-proveedores': {
       id: '/cotizaciones-proveedores'
       path: '/cotizaciones-proveedores'
@@ -326,6 +419,13 @@ declare module '@tanstack/react-router' {
       path: '/clientes'
       fullPath: '/clientes'
       preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/boveda-3d': {
+      id: '/boveda-3d'
+      path: '/boveda-3d'
+      fullPath: '/boveda-3d'
+      preLoaderRoute: typeof Boveda3dRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayuda': {
@@ -402,14 +502,19 @@ const rootRouteChildren: RootRouteChildren = {
   AjustesRoute: AjustesRoute,
   AuditLogRoute: AuditLogRoute,
   AyudaRoute: AyudaRoute,
+  Boveda3dRoute: Boveda3dRoute,
   ClientesRoute: ClientesRoute,
   ComprasRoute: ComprasRoute,
   CotizacionesRoute: CotizacionesRouteWithChildren,
   CotizacionesProveedoresRoute: CotizacionesProveedoresRoute,
+  Estadisticas3dRoute: Estadisticas3dRoute,
+  Impresion3dRoute: Impresion3dRoute,
   InventarioRoute: InventarioRoute,
   KanbanRoute: KanbanRoute,
   KitsRoute: KitsRoute,
   LoginRoute: LoginRoute,
+  Logros3dRoute: Logros3dRoute,
+  Ordenes3dRoute: Ordenes3dRoute,
   ProyectosRoute: ProyectosRoute,
   RecordatoriosRoute: RecordatoriosRoute,
   UsuariosRoute: UsuariosRoute,

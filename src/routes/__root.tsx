@@ -1,6 +1,6 @@
 import { Outlet, createRootRoute, HeadContent, Scripts, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { Cloud, Settings as SettingsIcon, Bell } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import appCss from "../styles.css?url";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -22,6 +22,9 @@ import { useInventory } from "@/stores/inventory";
 import { useReminders } from "@/stores/reminders";
 import { notify } from "@/stores/notifications";
 import { GlobalChat } from "@/components/global-chat";
+import { useWorkspace } from "@/stores/workspace";
+import { useCadVault } from "@/stores/cad-vault";
+import { useFarm3D } from "@/stores/3d-farm";
 
 
 
@@ -173,12 +176,80 @@ function ProactiveNotifications() {
   return null;
 }
 
+function SmartWeatherSync() {
+  const settings = useSettings((s) => s.settings);
+  
+  useEffect(() => {
+    const checkWeather = async () => {
+      const w = (settings as any).weather;
+      if (!w?.lat || !w?.lng) return;
+      
+      const now = Date.now();
+      const lastFetch = w.lastFetch || 0;
+      const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+      
+      if (now - lastFetch > TWELVE_HOURS_MS) {
+        try {
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${w.lat}&longitude=${w.lng}&current=relative_humidity_2m`);
+          const data = await res.json();
+          const humidity = data.current.relative_humidity_2m;
+          useSettings.getState().update({ weather: { ...w, humidity, lastFetch: now } } as any);
+        } catch (error) { console.error("Error obteniendo clima", error); }
+      }
+    };
+    checkWeather();
+  }, [(settings as any).weather?.lat, (settings as any).weather?.lng]);
+  return null;
+}
+
 function RootLayout() {
   const branding = useSettings((s) => s.settings.branding);
   const user = useAuth((s) => s.user);
   const isAdmin = !!user?.isAdmin;
   const showDeco = branding.showDecoBackground !== false;
   const pathname = useLocation({ select: (l) => l.pathname });
+  const navigate = useNavigate();
+
+  const activeWorkspace = useWorkspace((s) => s.activeWorkspace);
+  const setWorkspace = useWorkspace((s) => s.setWorkspace);
+  const prevWorkspaceRef = useRef(activeWorkspace);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    const is3DRoute = pathname.includes("-3d");
+    const isNeutralRoute = pathname === "/ajustes" || pathname === "/ayuda" || pathname === "/audit-log" || pathname === "/login";
+
+    if (!mounted.current) {
+      mounted.current = true;
+      if (pathname === "/" && activeWorkspace === "3d") {
+        navigate({ to: "/impresion-3d", replace: true });
+      } else if (is3DRoute && activeWorkspace === "erp") {
+        setWorkspace("3d");
+        prevWorkspaceRef.current = "3d";
+      } else if (!is3DRoute && !isNeutralRoute && pathname !== "/" && activeWorkspace === "3d") {
+        setWorkspace("erp");
+        prevWorkspaceRef.current = "erp";
+      }
+      return;
+    }
+
+    if (prevWorkspaceRef.current !== activeWorkspace) {
+      if (activeWorkspace === "3d" && !is3DRoute && !isNeutralRoute) {
+        navigate({ to: "/impresion-3d" });
+      } else if (activeWorkspace === "erp" && is3DRoute) {
+        navigate({ to: "/" });
+      }
+      prevWorkspaceRef.current = activeWorkspace;
+    } else {
+      if (is3DRoute && activeWorkspace === "erp") {
+        setWorkspace("3d");
+        prevWorkspaceRef.current = "3d";
+      } else if (!is3DRoute && !isNeutralRoute && activeWorkspace === "3d") {
+        setWorkspace("erp");
+        prevWorkspaceRef.current = "erp";
+      }
+    }
+  }, [activeWorkspace, pathname, navigate, setWorkspace]);
 
   return (
     <div className="min-h-screen flex w-full bg-background">
@@ -212,6 +283,7 @@ function RootLayout() {
         </main>
       </div>
       <Toaster position="bottom-right" richColors />
+      <SmartWeatherSync />
       <ProactiveNotifications />
       <GlobalChat />
     </div>

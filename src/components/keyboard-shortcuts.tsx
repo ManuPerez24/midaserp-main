@@ -1,130 +1,95 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Keyboard } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-
-const SHORTCUTS: { keys: string; desc: string }[] = [
-  { keys: "?", desc: "Mostrar esta ayuda" },
-  { keys: "/", desc: "Enfocar búsqueda" },
-  { keys: "Ctrl/⌘ + K", desc: "Búsqueda global" },
-  { keys: "g i", desc: "Ir a Inventario" },
-  { keys: "g c", desc: "Ir a Cotizaciones" },
-  { keys: "g k", desc: "Ir a Kits" },
-  { keys: "g l", desc: "Ir a Clientes" },
-  { keys: "g d", desc: "Ir al Dashboard" },
-  { keys: "g r", desc: "Ir a Recordatorios" },
-  { keys: "g s", desc: "Ir a Ajustes" },
-  { keys: "n", desc: "Nuevo (en la página actual)" },
-  { keys: "Esc", desc: "Cerrar diálogos" },
-];
-
-function isTyping(): boolean {
-  const el = document.activeElement;
-  if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if ((el as HTMLElement).isContentEditable) return true;
-  return false;
-}
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Command, Search, PlusCircle, Package, FolderKanban, Factory, HelpCircle } from "lucide-react";
+import { useWorkspace } from "@/stores/workspace";
 
 export function KeyboardShortcuts() {
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const [helpOpen, setHelpOpen] = useState(false);
+  const setWorkspace = useWorkspace((s) => s.setWorkspace);
+  const activeWorkspace = useWorkspace((s) => s.activeWorkspace);
 
   useEffect(() => {
-    let gPending = false;
-    let gTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignorar si el usuario está escribiendo dentro de un input o textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
 
-    const goto = (path: string) => navigate({ to: path });
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTyping()) return;
-
-      // ? help
-      if (e.key === "?") {
+      // Shift + ? -> Abrir el panel de ayuda de atajos
+      if (e.key === "?" && e.shiftKey) {
         e.preventDefault();
-        setHelpOpen(true);
-        return;
+        setOpen((o) => !o);
       }
-
-      // / focus search input (the search button in header opens dialog via Cmd+K, here we trigger that)
-      if (e.key === "/") {
+      
+      // Alt + N -> Ir a Cotizaciones (Nueva)
+      if (e.altKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        // Synthesize Ctrl+K
-        window.dispatchEvent(
-          new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
-        );
-        return;
+        navigate({ to: "/cotizaciones" });
       }
 
-      // n -> "new" - dispatch a custom event pages can listen to
-      if (e.key === "n") {
+      // Alt + I -> Abrir Inventario
+      if (e.altKey && e.key.toLowerCase() === "i") {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("app:new"));
-        return;
+        navigate({ to: "/inventario" });
       }
 
-      // g + letter sequence
-      if (gPending) {
-        gPending = false;
-        if (gTimer) clearTimeout(gTimer);
-        const map: Record<string, string> = {
-          i: "/inventario",
-          c: "/cotizaciones",
-          k: "/kits",
-          l: "/clientes",
-          d: "/",
-          r: "/recordatorios",
-          s: "/ajustes",
-        };
-        const dest = map[e.key.toLowerCase()];
-        if (dest) {
-          e.preventDefault();
-          goto(dest);
-        }
-        return;
+      // Alt + P -> Abrir Proyectos
+      if (e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        navigate({ to: "/proyectos" });
       }
-      if (e.key === "g") {
-        gPending = true;
-        if (gTimer) clearTimeout(gTimer);
-        gTimer = setTimeout(() => {
-          gPending = false;
-        }, 800);
+
+      // Alt + M -> Cambiar Workspace (Midas ERP <-> Midas 3D)
+      if (e.altKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        setWorkspace(activeWorkspace === "erp" ? "3d" : "erp");
       }
     };
 
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      if (gTimer) clearTimeout(gTimer);
-    };
-  }, [navigate]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigate, activeWorkspace, setWorkspace]);
+
+  const shortcuts = [
+    { keys: ["Ctrl / Cmd", "K"], description: "Abrir Paleta de Comandos / Búsqueda", icon: <Search className="h-4 w-4" /> },
+    { keys: ["Shift", "?"], description: "Mostrar este panel de atajos", icon: <HelpCircle className="h-4 w-4" /> },
+    { keys: ["Alt", "N"], description: "Ir a Cotizaciones (Nueva)", icon: <PlusCircle className="h-4 w-4" /> },
+    { keys: ["Alt", "I"], description: "Abrir el Inventario", icon: <Package className="h-4 w-4" /> },
+    { keys: ["Alt", "P"], description: "Abrir Proyectos / Gantt", icon: <FolderKanban className="h-4 w-4" /> },
+    { keys: ["Alt", "M"], description: "Alternar entre Midas ERP y Fábrica 3D", icon: <Factory className="h-4 w-4" /> },
+  ];
 
   return (
-    <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Keyboard className="h-5 w-5" /> Atajos de teclado
+            <Command className="h-5 w-5" /> Atajos de Teclado
           </DialogTitle>
-          <DialogDescription>
-            Funcionan en cualquier pantalla, salvo cuando estás escribiendo en un campo.
-          </DialogDescription>
         </DialogHeader>
-        <div className="divide-y rounded-md border">
-          {SHORTCUTS.map((s) => (
-            <div key={s.keys} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span className="text-muted-foreground">{s.desc}</span>
-              <kbd className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{s.keys}</kbd>
+        <div className="grid gap-3 py-4">
+          {shortcuts.map((shortcut, i) => (
+            <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-background rounded-md shadow-sm border text-primary">
+                  {shortcut.icon}
+                </div>
+                <span className="font-medium text-sm">{shortcut.description}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {shortcut.keys.map((k, j) => (
+                  <span key={j} className="px-2 py-1 bg-background border shadow-sm rounded text-xs font-mono font-bold text-muted-foreground">
+                    {k}
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
+        </div>
+        <div className="text-center text-xs text-muted-foreground mt-2">
+          Puedes presionar <kbd className="px-1.5 py-0.5 bg-muted border rounded font-mono font-bold text-foreground">Shift + ?</kbd> en cualquier momento para ver esta ventana.
         </div>
       </DialogContent>
     </Dialog>

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Kanban, Plus, User, CalendarDays, Trash2 } from "lucide-react";
+import { Kanban, Plus, User, CalendarDays, Trash2, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectTaskCreateModal, ProjectTaskEditModal } from "@/routes/gantt-task-modals";
 
@@ -101,6 +101,17 @@ export function ProjectTasksModal({ children, project, open, onOpenChange }: { c
                             <div className="font-semibold text-sm pr-6 leading-tight">{t.title}</div>
                             {t.description && <div className="text-xs text-muted-foreground mt-2 line-clamp-3">{t.description}</div>}
                             
+                            {t.subtasks && t.subtasks.length > 0 && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-3 font-medium bg-muted/40 p-1.5 rounded-md border">
+                                <CheckSquare className="h-3.5 w-3.5" />
+                                <span>{t.subtasks.filter((s:any)=>s.done).length}/{t.subtasks.length}</span>
+                                <div className="flex-1 h-1 bg-muted rounded-full ml-1 overflow-hidden">
+                                   <div className={`h-full transition-all duration-500 ${t.subtasks.filter((s:any)=>s.done).length === t.subtasks.length ? 'bg-emerald-500' : 'bg-primary'}`} style={{width: `${Math.round((t.subtasks.filter((s:any)=>s.done).length / Math.max(1, t.subtasks.length)) * 100)}%`}} />
+                                </div>
+                                <span className="text-[10px] ml-1">{Math.round((t.subtasks.filter((s:any)=>s.done).length / Math.max(1, t.subtasks.length)) * 100)}%</span>
+                              </div>
+                            )}
+
                             <div className="flex flex-wrap items-center justify-between mt-4 gap-2 text-xs">
                               <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/60 px-2 py-1 rounded-md font-medium">
                                 <User className="h-3 w-3 shrink-0" />

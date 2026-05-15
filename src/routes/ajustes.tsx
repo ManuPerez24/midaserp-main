@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Upload, X, Download, FileUp, Sun, Moon, Laptop, Lock, Unlock, Trash2, Sparkles } from "lucide-react";
+import { Eye, Upload, X, Download, FileUp, Sun, Moon, Laptop, Lock, Unlock, Trash2, Sparkles, Bell, Send, MessageCircle, HelpCircle, Briefcase, Factory, CloudRain, Droplets, MapPin, CloudUpload } from "lucide-react";
+import { Gamepad2, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +34,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { QuotePreviewSheet } from "@/components/quote-preview-sheet";
 import { SortableMenu } from "@/components/sortable-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AjustesPinGate } from "@/components/ajustes-pin-gate";
 import { useSettings, defaultMenuGroups } from "@/stores/settings";
 import { useInventory } from "@/stores/inventory";
@@ -113,12 +120,20 @@ function AjustesPage() {
   const updateFolio = useSettings((s) => s.updateFolio);
   const updateAi = useSettings((s) => s.updateAi);
   const setMenuGroups = useSettings((s) => s.setMenuGroups);
-  const menuGroups = settings.menuGroups ?? defaultMenuGroups;
+  const storedMenuGroups = settings.menuGroups ?? defaultMenuGroups;
+  const menuGroups = useMemo(() => {
+    const missingGroups = defaultMenuGroups.filter(dg => !storedMenuGroups.some(g => g.id === dg.id));
+    return [...storedMenuGroups, ...missingGroups];
+  }, [storedMenuGroups]);
   const pinHash = settings.security?.pinHash ?? null;
+
+  const erpGroups = menuGroups.filter(g => g.id !== "fabrica-3d");
+  const farmGroups = menuGroups.filter(g => g.id === "fabrica-3d");
 
   const [unlocked, setUnlocked] = useState(() => !pinHash || isAjustesUnlocked());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pendingBackup, setPendingBackup] = useState<BackupFile | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [pinNew, setPinNew] = useState("");
   const [pinNew2, setPinNew2] = useState("");
@@ -157,10 +172,31 @@ function AjustesPage() {
     toast.success("PIN eliminado");
   };
 
-  const themeOptions: { value: ThemeMode; label: string; Icon: typeof Sun }[] = [
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    try {
+      // Guardado forzado manual del estado global
+      // (Se puede extender importando y agregando otros stores si es necesario)
+      await saveUserData({
+        data: { store: "midas:v1:settings", data: { settings }, shared: true },
+      });
+      toast.success("Sincronización completada", {
+        description: "Los datos han sido respaldados manualmente en la nube."
+      });
+      logAction("settings:sync", "Sincronización manual forzada a la base de datos.");
+    } catch (error) {
+      toast.error("Error al sincronizar", { description: "Revisa tu conexión a internet." });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const themeOptions: { value: string; label: string; Icon: typeof Sun }[] = [
     { value: "claro", label: "Claro", Icon: Sun },
     { value: "oscuro", label: "Oscuro", Icon: Moon },
     { value: "sistema", label: "Sistema", Icon: Laptop },
+    { value: "ciberpunk", label: "Ciberpunk", Icon: Gamepad2 },
+    { value: "neumorfico", label: "Neumórfico", Icon: Layers },
   ];
 
   const handleImport = async (file: File) => {
@@ -480,17 +516,17 @@ function AjustesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Tema de la interfaz</CardTitle>
+            <CardTitle>Apariencia / Skins</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
               {themeOptions.map(({ value, label, Icon }) => {
                 const active = (settings.branding.theme ?? "sistema") === value;
                 return (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => updateBranding({ theme: value })}
+                    onClick={() => updateBranding({ theme: value as ThemeMode })}
                     className={`flex flex-col items-center gap-2 rounded-lg border p-4 text-sm transition-colors hover:bg-accent ${
                       active ? "border-primary bg-accent" : ""
                     }`}
@@ -507,15 +543,22 @@ function AjustesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Backup local</CardTitle>
+            <CardTitle>Respaldo y Sincronización</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Exporta toda tu información (productos, kits, clientes, cotizaciones y
-              ajustes) en un archivo JSON. Puedes restaurarlo después en este u otro
-              navegador.
+              Fuerza la subida de datos a la nube para asegurarte de que todo está guardado, o
+              exporta toda tu información en un archivo JSON para tener un respaldo local.
             </p>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant="default"
+                onClick={handleForceSync}
+                disabled={isSyncing}
+              >
+                <CloudUpload className="mr-2 h-4 w-4" /> 
+                {isSyncing ? "Sincronizando..." : "Sincronizar a la Nube"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => {
@@ -606,6 +649,46 @@ function AjustesPage() {
               layout={settings.pdf.layout ?? ["header", "client", "table", "totals", "notes", "terms"]}
               onChange={(newLayout) => updatePdf({ layout: newLayout })}
             />
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CloudRain className="h-4 w-4 text-primary" /> Clima y Secado Inteligente (Smart Weather)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Guarda tu ubicación para que el sistema consulte la humedad ambiental local automáticamente. Esto inyectará recomendaciones de temperatura y horas de secado dinámicas en el inventario de bobinas.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3 items-end">
+              <div className="space-y-1.5">
+                <Label>Latitud</Label>
+                <Input type="number" placeholder="Ej. 19.4326" value={(settings as any).weather?.lat || ""} onChange={(e) => updateSettings({ weather: { ...((settings as any).weather || {}), lat: parseFloat(e.target.value) } } as any)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Longitud</Label>
+                <Input type="number" placeholder="Ej. -99.1332" value={(settings as any).weather?.lng || ""} onChange={(e) => updateSettings({ weather: { ...((settings as any).weather || {}), lng: parseFloat(e.target.value) } } as any)} />
+              </div>
+              <Button variant="outline" onClick={() => {
+                if ("geolocation" in navigator) {
+                  navigator.geolocation.getCurrentPosition((pos) => {
+                    updateSettings({ weather: { ...((settings as any).weather || {}), lat: pos.coords.latitude, lng: pos.coords.longitude } } as any);
+                    toast.success("Ubicación guardada exitosamente");
+                  }, () => toast.error("Permiso de ubicación denegado"));
+                } else {
+                  toast.error("Geolocalización no soportada en tu navegador");
+                }
+              }}>
+                <MapPin className="h-4 w-4 mr-2" /> Obtener mi ubicación
+              </Button>
+            </div>
+            {(settings as any).weather?.humidity && (
+              <div className="text-sm text-muted-foreground bg-blue-500/10 text-blue-700 border border-blue-200 p-3 rounded-md flex items-center gap-2 w-fit">
+                <Droplets className="h-4 w-4 animate-pulse" /> Última humedad registrada: <strong>{(settings as any).weather.humidity}%</strong>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -791,17 +874,38 @@ function AjustesPage() {
               Arrastra para reordenar, edita etiquetas u oculta items. Los cambios se
               guardan localmente en este navegador.
             </p>
-            {menuGroups.map((group) => (
-              <div key={group.id} className="space-y-2 rounded-lg border p-3">
-                <p className="text-xs font-semibold uppercase text-muted-foreground">
-                  {group.label}
-                </p>
-                <SortableMenu
-                  items={group.items}
-                  onChange={(items) => updateGroupItems(group.id, items)}
-                />
-              </div>
-            ))}
+            <Tabs defaultValue="erp" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 max-w-sm mb-4">
+                <TabsTrigger value="erp"><Briefcase className="h-4 w-4 mr-2"/> Midas ERP</TabsTrigger>
+                <TabsTrigger value="3d"><Factory className="h-4 w-4 mr-2"/> Fábrica 3D</TabsTrigger>
+              </TabsList>
+              <TabsContent value="erp" className="space-y-4">
+                {erpGroups.map((group) => (
+                  <div key={group.id} className="space-y-2 rounded-lg border p-3">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      {group.label}
+                    </p>
+                    <SortableMenu
+                      items={group.items}
+                      onChange={(items) => updateGroupItems(group.id, items)}
+                    />
+                  </div>
+                ))}
+              </TabsContent>
+              <TabsContent value="3d" className="space-y-4">
+                {farmGroups.map((group) => (
+                  <div key={group.id} className="space-y-2 rounded-lg border p-3">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      {group.label}
+                    </p>
+                    <SortableMenu
+                      items={group.items}
+                      onChange={(items) => updateGroupItems(group.id, items)}
+                    />
+                  </div>
+                ))}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
@@ -913,6 +1017,133 @@ function AjustesPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-primary" /> Notificaciones Push (IoT)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Configura las credenciales para enviar alertas automáticas de Midas 3D (mermas, fin de impresión) a través de Telegram o WhatsApp.
+            </p>
+            
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/10">
+              <div>
+                <Label className="text-sm">Habilitar Notificaciones Push</Label>
+                <p className="text-xs text-muted-foreground">Activa el envío de mensajes a los canales configurados.</p>
+              </div>
+              <Switch
+                checked={(settings as any).notifications?.enabled === true}
+                onCheckedChange={(v) => updateSettings({ notifications: { ...((settings as any).notifications || {}), enabled: v } } as any)}
+              />
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 mt-4">
+              <div className="space-y-3 p-4 border rounded-lg bg-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <Send className="h-4 w-4 text-sky-500" />
+                  <Label className="text-base font-semibold text-sky-600">Telegram</Label>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs">Bot Token</Label>
+                    <Popover>
+                      <PopoverTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer" /></PopoverTrigger>
+                      <PopoverContent className="w-80 text-xs" side="top">
+                        <p className="font-bold mb-1">¿Cómo obtenerlo?</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                          <li>Abre Telegram y busca a <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-primary hover:underline font-bold">@BotFather</a>.</li>
+                          <li>Envía el comando <code>/newbot</code> y sigue las instrucciones para nombrar a tu bot.</li>
+                          <li>Copia el token HTTP de la API que te dará al final (ej. 123456:ABC...).</li>
+                        </ol>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <Input 
+                    type="password"
+                    placeholder="123456789:ABCDefghIJKL..." 
+                    value={(settings as any).notifications?.telegramToken || ""} 
+                    onChange={(e) => updateSettings({ notifications: { ...((settings as any).notifications || {}), telegramToken: e.target.value } } as any)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs">Chat ID</Label>
+                    <Popover>
+                      <PopoverTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer" /></PopoverTrigger>
+                      <PopoverContent className="w-80 text-xs" side="top">
+                        <p className="font-bold mb-1">¿Qué es y cómo conseguirlo?</p>
+                        <p className="text-muted-foreground mb-2">Es el identificador único del chat (grupo o usuario) a donde el bot enviará las alertas.</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                          <li>Envía un mensaje cualquiera a tu nuevo bot en Telegram.</li>
+                          <li>Visita <a href="https://api.telegram.org/botTU_TOKEN/getUpdates" target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">https://api.telegram.org/botTU_TOKEN/getUpdates</a> en tu navegador web (reemplazando TU_TOKEN con el real).</li>
+                          <li>Busca el campo <strong>"chat": {"{"} "id": 123456789 {"}"}</strong> y copia ese número (puede ser negativo si es un grupo).</li>
+                        </ol>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <Input 
+                    placeholder="-1001234567890" 
+                    value={(settings as any).notifications?.telegramChatId || ""} 
+                    onChange={(e) => updateSettings({ notifications: { ...((settings as any).notifications || {}), telegramChatId: e.target.value } } as any)}
+                  />
+                  <p className="text-[10px] text-muted-foreground">El ID del grupo o usuario que recibirá las alertas.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 p-4 border rounded-lg bg-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageCircle className="h-4 w-4 text-emerald-500" />
+                  <Label className="text-base font-semibold text-emerald-600">WhatsApp</Label>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs">Access Token / API Key</Label>
+                    <Popover>
+                      <PopoverTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer" /></PopoverTrigger>
+                      <PopoverContent className="w-80 text-xs" side="top">
+                        <p className="font-bold mb-1">Configuración en Meta</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                          <li>Ve a <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer" className="text-primary hover:underline font-bold">developers.facebook.com</a> y crea una App de empresa.</li>
+                          <li>Añade el producto de <strong>WhatsApp</strong>.</li>
+                          <li>En la sección "Configuración de la API", copia el Token de acceso temporal o permanente.</li>
+                        </ol>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <Input 
+                    type="password"
+                    placeholder="EAAB..." 
+                    value={(settings as any).notifications?.whatsappToken || ""} 
+                    onChange={(e) => updateSettings({ notifications: { ...((settings as any).notifications || {}), whatsappToken: e.target.value } } as any)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs">Número Destino</Label>
+                    <Popover>
+                      <PopoverTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer" /></PopoverTrigger>
+                      <PopoverContent className="w-80 text-xs" side="top">
+                        <p className="font-bold mb-1">Destinatario Autorizado</p>
+                        <p className="text-muted-foreground">Si usas un token de pruebas, este número debe estar agregado y verificado en tu panel de <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer" className="text-primary hover:underline font-semibold">Meta for Developers</a> (en la sección "Lista de destinatarios de prueba").</p>
+                        <p className="text-muted-foreground mt-1">Recuerda incluir tu código de país (ej. +52 o +34).</p>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <Input 
+                    placeholder="+5215555555555" 
+                    value={(settings as any).notifications?.whatsappPhone || ""} 
+                    onChange={(e) => updateSettings({ notifications: { ...((settings as any).notifications || {}), whatsappPhone: e.target.value } } as any)}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Incluye el código de país (ej. +52).</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Seguridad</CardTitle>

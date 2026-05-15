@@ -2,6 +2,9 @@
 
 Este documento sirve como la radiografía técnica oficial de **Midas ERP**. Su objetivo es proporcionar un contexto claro sobre cómo está construida la aplicación, qué hace cada módulo y cómo se gestiona el estado y las integraciones de IA.
 
+### F. Workspace Switcher (Contextos de Sistema)
+Para evitar saturar el menú principal cuando la empresa escala a operaciones de manufactura, el sistema cuenta con un conmutador de espacio de trabajo. Al cambiar de "Midas ERP" a "Midas 3D", la barra lateral muta para mostrar exclusivamente métricas de fabricación y aísla el ruido visual. Cuenta con un enrutador inteligente (controlado de forma segura en `__root.tsx` usando `useRef`) que redirige automáticamente a la página principal del espacio de trabajo seleccionado (`/impresion-3d` o `/`) y sincroniza el contexto al acceder a URLs directas sin causar ciclos infinitos de renderizado.
+
 ---
 
 ## 1. Stack Tecnológico
@@ -42,6 +45,11 @@ Integrado inicialmente en el módulo de Proyectos. Es un gestor documental estil
 - **`/kits`:** Creador de agrupaciones de productos. Los kits son reutilizables y pueden "Inyectarse" directamente en una cotización activa.
 - **`/clientes`:** Directorio CRM. Guarda contactos, visualiza estadísticas de ventas (Ficha 360°), recordatorios y adjunta archivos al expediente del cliente.
 - **`/proyectos`:** Módulo puente entre ventas y ejecución. Gestiona el ciclo de vida completo (Levantamiento -> Presupuesto -> Planeación -> Ejecución -> Completado) con disparadores automáticos de tareas, almacenamiento documental, vinculación de cotizaciones y Tarea Activa. Cuenta con un **Dashboard Inmersivo Dinámico** que dibuja el Cronograma (Gantt) a pantalla completa con soporte para manipulación directa interactiva (Drag & Move, Resize, Dependencias Interactivas SVG, Selección Múltiple con `Ctrl+Click` para mover/borrar en bloque, Filtros Inteligentes y Ruta Crítica). El **Kanban Nativo** y el **Gantt** comparten un motor unificado de **Modales Inmersivos a pantalla completa** (`gantt-task-modals.tsx`), divididos en dos columnas: detalles y evidencias a la izquierda, y un **Roadmap Multimedia (Línea de Tiempo)** a la derecha que audita cada cambio. Por sanidad de arquitectura, todos los modales se encuentran extraídos en rutas independientes.
+- **`/impresion-3d`, `/ordenes-3d` y `/estadisticas-3d` (Contexto Midas 3D):** Espacio de trabajo dedicado a la manufactura. Administra la flota de impresoras 3D con un motor de **Filtros Avanzados**. Monitorea órdenes de producción con un **Catálogo Fotográfico de Mermas**. Calcula algoritmos de cumplimiento predictivo (ETA) y genera un **Gráfico de Evolución (Burn-down/Burn-up)** compuesto interactivo (Recharts) a pantalla completa que traza la velocidad requerida, la deuda técnica diaria (Required Run Rate) y proyecta visualmente la meta ideal superponiendo el rendimiento con sombreado de fines de semana (`ReferenceArea`). Incorpora un **Modo Noche (Night Shift)** que filtra proactivamente piezas de larga duración (>8 hrs).
+  Integra un **Layout Isométrico 3D** nativo en CSS/React que funge como Gemelo Digital de la planta. Soporta estanterías multinivel (`posZ`), tamaño de máquinas variables (`isTall`), rotación en 4 ejes (X, Y, -X, -Y), y un motor avanzado de **Modo Constructor** que permite dibujar paredes en un solo bloque continuo haciendo clics de Punto A al Punto B con ajuste perfecto a cuadrícula (Grid Snapping). El **Modo Mover** implementa un sistema Anticolisiones Visual (fantasmas translúcidos) para evitar bloqueos del mouse y de geometría durante la manipulación con sus `Gizmo Drag`. Adicionalmente, el ecosistema transiciona estratégicamente hacia un modelo predictivo mediante un **Lector de G-Code / Slicer Integrado** (bypasseando APIs de hardware cerrado) para calcular ETAs y extraer consumos de material nativamente en la web.
+  Además, incorpora un **Motor de Secado Inteligente (Smart Weather)** que almacena las coordenadas geográficas en la base de datos para consultar automáticamente la API de Open-Meteo cada 12 horas. Esto inyecta indicadores visuales interactivos en el inventario de bobinas, mostrando a través de *Tooltips* las instrucciones precisas de temperatura y tiempo de secado para materiales higroscópicos basándose en la humedad ambiental actual.
+  **Sinergia con Bóveda CAD (BOM):** Las Órdenes de Producción pueden vincularse relacionalmente a un Proyecto de la Bóveda CAD, permitiendo a los operadores previsualizar y descargar los modelos 3D directamente desde su panel de control. Los accesorios vinculados en el CAD se auto-extraen y se presentan como una **Lista de Materiales (BOM)**. A nivel de máquina, se implementó un selector para asignar el Archivo/Modelo exacto que se está procesando. Adicionalmente, el **Selector Inteligente de Bobinas** filtra dinámicamente las opciones disponibles asegurando que cumplan el material predeterminado del CAD, e inhabilitando aquellas bobinas que se encuentren ya asignadas a otras impresoras, garantizando trazabilidad absoluta. Asimismo, los archivos identificados como accesorios deshabilitan la sumatoria de "Piezas Producidas" de la orden principal, ya que no son parte indispensable para cumplir la meta de la orden de producción.
+- **`/boveda-3d`:** Gestor documental CAD y PLM (Product Lifecycle Management). Se comporta como un Explorador de Archivos nativo (estilo SO), soportando estructura de carpetas (`CadFolder`), selección múltiple, menús contextuales nativos y movimiento de archivos. Usa una UI con histórico de modificaciones (Changelog) en línea de tiempo, almacenando archivos pesados localmente en `/public/uploads` mediante `useServerFn` y renderizando mediante un visor WebGL retrocompatible. Los archivos cuentan con metadatos de manufactura como "Peso en gramos" y "Tiempo Estimado de Impresión", cuyos valores se heredan de manera inteligente (Auto-Completado) al subir una nueva versión para facilitar la gestión.
 - **`/ayuda`:** Centro de ayuda y base de conocimiento interactiva integrada en el sistema. Proporciona guías de inicio rápido, explicación de los paradigmas UX (Tarea Activa, Menú Radial, Paleta de Comandos), atajos de teclado y glosario.
 - **`/ajustes`:** Módulo exclusivo para Administradores. Controla el branding, perfil fiscal, IA, seguridad por PIN, respaldos locales y el **Motor de PDFs** (Creador visual Drag & Drop, selección de plantillas y visibilidad de columnas dinámicas).
 
@@ -54,7 +62,10 @@ Midas ERP utiliza **Zustand** de forma extensiva. A diferencia de aplicaciones t
 ### Sincronización Server/Client
 Las tiendas (`stores/*.ts`) usan una función especial llamada `registerServerStore`. 
 Cuando se realiza una mutación (ej. `addProduct`), el estado local se actualiza inmediatamente (UI súper rápida). Detrás de escena, un *debounce* agrupa los cambios y llama a la función del servidor `saveUserData` (`util/sync.functions.ts`), persistiendo todo en la base de datos (MongoDB).
-*Nota de persistencia segura:* Es crítico que al actualizar objetos anidados en Zustand (como `settings.ai`), se haga un spread del objeto completo (`...settings.ai`) para evitar sobrescrituras destructivas a nivel subdocumento en MongoDB.
+*Nota de persistencia segura:* Es crítico que al actualizar objetos anidados en Zustand (como `settings.ai`), se haga un spread del objeto completo (`...settings.ai`) para evitar sobrescrituras destructivas a nivel subdocumento en MongoDB. Nota: El middleware `persist` **no debe usarse en combinación** con `registerServerStore`, ya que la rehidratación de `localStorage` vacío en un navegador nuevo dispara un guardado optimista que borra la base de datos (Race condition solucionada en Midas 3D).
+
+### Sincronización Manual (Force Sync)
+Para brindar mayor certeza a los usuarios sobre la seguridad de sus datos antes de cerrar el navegador, se implementó un mecanismo de **Sincronización Manual**. Este mecanismo fuerza de inmediato la ejecución de `saveUserData` omitiendo el tiempo de espera del *debounce*, enviando los estados globales locales a MongoDB bajo demanda.
 
 ### Stores Principales:
 - `useInventory`: Gestiona productos, histórico de precios y categorías.
@@ -62,7 +73,9 @@ Cuando se realiza una mutación (ej. `addProduct`), el estado local se actualiza
 - `useClients`: Directorio CRM.
 - `useKits`: Grupos de productos.
 - `useProjects`: Administra el estado de los proyectos en ejecución, sus tareas, expedientes documentales, presupuesto sumado de cotizaciones vinculadas, y materiales consumidos.
+- `useCadVault`: Gestiona la bóveda de archivos tridimensionales, proyectos CAD y su control de versiones histórico sin sobrecargar la base de datos principal de piezas.
 - `useSettings`: Configuraciones globales de la empresa, UI y llaves de APIs.
+- `useFarm3D`: Gestiona la flota de impresoras 3D, el inventario de bobinas (filamentos), órdenes de producción y la preferencia de visualización analítica (`workWeekMode` para aislar estadísticas de L-V).
 - `useActiveTask`: Controla el estado del "Modo Edición" global.
 - `useLocksStore`: Gestiona el sistema de candados colaborativos (Heartbeats).
 
@@ -84,6 +97,11 @@ El ERP no depende de proveedores preconfigurados forzosos (se eliminó la depend
    - Analiza las notas y motivos de rechazo de las cotizaciones perdidas. Extrae las palabras clave (ej. "Caro", "Competencia") y calcula un índice de salud del negocio (0 al 100).
 4. **Cross-Selling (Sugerencias):**
    - Analiza las líneas de la cotización actual (`ActiveTask`) y sugiere productos complementarios (Accesorios, cables, etc.) basados en relaciones semánticas.
+
+### Motor de Notificaciones IoT (`util/notifications.functions.ts`)
+- **Push Automático:** Integración con la API oficial de **Telegram** y la Cloud API de **WhatsApp (Meta)**.
+- **Ejecución Segura:** Utiliza `createServerFn` de TanStack Start para que los tokens (Bot Tokens y API Keys) nunca se expongan en el navegador del cliente.
+- **Usabilidad Industrial:** Diseñado para enviar alertas proactivas a los operadores y administradores sobre mermas en máquinas 3D o finalización de impresiones largas.
 
 ---
 

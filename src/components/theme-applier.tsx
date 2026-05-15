@@ -14,9 +14,15 @@ export function ThemeApplier() {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
 
-    const apply = (mode: "claro" | "oscuro") => {
-      if (mode === "oscuro") root.classList.add("dark");
-      else root.classList.remove("dark");
+    const apply = (mode: string) => {
+      root.classList.remove("dark", "theme-ciberpunk", "theme-neumorfico");
+      if (mode === "oscuro") {
+        root.classList.add("dark");
+      } else if (mode === "ciberpunk") {
+        root.classList.add("dark", "theme-ciberpunk");
+      } else if (mode === "neumorfico") {
+        root.classList.add("theme-neumorfico");
+      }
     };
 
     if (theme === "sistema") {

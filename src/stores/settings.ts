@@ -47,6 +47,17 @@ export const defaultMenuGroups: MenuGroup[] = [
       { id: "audit-log", label: "Log de Auditoría", icon: "History" },
     ],
   },
+  {
+    id: "fabrica-3d",
+    label: "Fábrica 3D",
+    items: [
+      { id: "impresion-3d", label: "Granja de Impresoras", icon: "Printer" as any },
+      { id: "ordenes-3d", label: "Órdenes de Producción", icon: "ListChecks" as any },
+      { id: "estadisticas-3d", label: "Dashboard y Métricas", icon: "BarChartHorizontal" as any },
+      { id: "boveda-3d", label: "Bóveda CAD", icon: "Box" as any },
+      { id: "logros-3d", label: "Logros 3D", icon: "Award" as any },
+    ],
+  },
 ];
 
 const defaultSettings: AppSettings = {

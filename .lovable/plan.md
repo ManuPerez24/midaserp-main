@@ -64,6 +64,73 @@
 
 ---
 
+## Siguientes Pasos: Fase 6 - Módulo de Granja 3D y Producción (Midas 3D)
+**Objetivo:** Crear un ecosistema dedicado ("Workspace") para la administración de impresoras 3D y el control estadístico predictivo de piezas de manufactura.
+
+*   **[Completado] Paso 6.1: Workspace Switcher.** Implementar un "Switch" global (menú desplegable interactivo en la cabecera del menú lateral) para alternar entre "Midas ERP" y "Midas 3D" con guardado persistente en Zustand. Incluye motor de redirección inteligente que auto-navega a la página inicial del Workspace activo o sincroniza el estado al acceder vía URL directa.
+*   **[Completado] Paso 6.2: Fleet Management (Impresoras).** 
+    *   **[Completado] Paso 6.2.1:** Creación del Store (`useFarm3D`) con persistencia en el servidor para almacenar la flota de impresoras y las órdenes de producción.
+    *   **[Completado] Paso 6.2.2:** Creación de la interfaz del Dashboard de Impresoras (`/impresion-3d.tsx`) con un grid de tarjetas y cambio rápido de estados.
+*   **[Completado] Paso 6.3: Órdenes de Producción e Interfaz de Operario.** Módulo visual con tarjetas interactivas que cumplen el Paso 6.3 y el Paso 6.5 (Registro ágil de Piezas Buenas/Mermas mediante botoneras rápidas).
+*   **[Completado] Paso 6.4: Dashboard Analítico 3D.** Algoritmos de salud predictiva: cálculo de velocidad (pzs/día), estimación de término inteligente (ETA date), cálculo de mermas y estatus semántico (Adelantado, Atrasado, Estancado).
+    *   **[Completado]** Gráfico Burn-down Predictivo: Integración de un gráfico compuesto avanzado (Recharts) en las tarjetas de órdenes activas con opción de Modal a pantalla completa. Traza dinámicamente métricas diarias, Meta Ideal, Velocidad Requerida, Velocidad de Recuperación (deuda técnica diaria) y sombreado inteligente de fines de semana (Zebra striping).
+*   **[Completado] Paso 6.5: Inventario de Bobinas (Filamento).** Implementado el registro exhaustivo de bobinas con pesos, incluyendo catálogos avanzados (HS, CF, Silk, PC, etc.). El sistema ahora descuenta en gramos el material usado tras reportar cada pieza terminada.
+    *   **[Completado] Paso 6.5.1:** Soporte de Tara (Peso del carrete vacío) en bobinas, permitiendo cruzar el peso real bruto de una báscula física contra el sistema, y adición de métricas de material globales en las estadísticas.
+    *   **[Completado] Paso 6.5.2:** Adición de botones de Presets Comerciales (eSun, Bambu, Sunlu) para auto-rellenar los formularios de bobinas y acelerar la carga en almacén.
+    *   **[Completado] Paso 6.5.3:** Implementación de historial de Presets Recientes. Cada nueva bobina se guarda en la base de datos como un atajo de carga rápida, limitado visualmente a 6 elementos con opción de expansión.
+    *   **[Completado] Paso 6.5.4:** Rediseño total del selector de materiales en creación de bobinas. Se eliminó el dropdown clásico y se implementó un `<Popover>` con una cuadrícula interactiva clasificada por color y familia química.
+    *   **[Completado] Paso 6.5.5:** Trazabilidad única de Bobinas (Idea 19 adaptada). Las bobinas generan un código aleatorio de 5 dígitos (Ej. A1B2C). Al cambiar el filamento de una máquina, este código se puede teclear para autoseleccionarla. Además, una bobina cargada en una máquina se bloquea visualmente para evitar ser usada por otra simultáneamente.
+*   **[Completado] Paso 6.8: Modularización de Impresión 3D.** Refactorización profunda de `impresion-3d.tsx` para extraer `IsometricFarmView`, utilidades y todos los formularios (`farm-modals.tsx`) a componentes independientes, reduciendo drásticamente la carga del componente principal.
+*   **[Completado] Paso 6.7: Switch de Horario Laboral.** Integración de filtro global persistente en el dashboard para alternar el cálculo de productividades (Piezas/día, ETAs) excluyendo opcionalmente sábados y domingos.
+*   **[Completado] Paso 6.6: Sub-tareas en Proyectos.** Adición de sub-tareas interactivas (Checklists) al modal Inmersivo del Gantt con barras de progreso seguras en el tablero Kanban.
+
+---
+## Siguientes Pasos: Fase 7 - Personalización e Interfaz (Skins & Atajos)
+*   **[Completado] Paso 7.1: Sistema de Temas Avanzados.** Implementación de skins UI complejas (Ciberpunk y Neumórfico) mediante inyección de variables `oklch` de CSS y manipulación de sombras neumórficas reactivas. Modificación del motor de temas principal para soportar múltiples instancias de apariencia global.
+*   **[Completado] Paso 7.2: Atajos de Teclado Profesionales.** Panel visual de ayuda y *listeners* de eventos `keydown` en React para navegación hiper-rápida (Cmd+K, Alt+N, Alt+M, etc.), cerrando la fase de usabilidad.
+*   **[Completado] Paso 7.3: Sincronización Manual a la Nube.** Integración de un botón global y comando en la Paleta (Cmd+K) para forzar la sincronización de todos los datos locales hacia MongoDB sin esperar el ciclo de guardado en segundo plano.
+
+---
+## Documentación Anexa
+*   Se ha generado el archivo `/ideas-midas-3d.md` con 30 ideas conceptuales de IoT, Manufactura e Integración de Hardware para futuras iteraciones del ecosistema Midas 3D.
+
+---
+## Siguientes Pasos: Fase 8 - Midas 3D (Manufactura Avanzada)
+**Objetivo:** Implementar las ideas top seleccionadas para llevar la granja 3D al nivel industrial.
+
+*   **[Completado]** Gráfica de Rendimiento por Marca de Filamento (Idea 11). Implementado en el Dashboard Analítico cruzando los registros de producción y mermas por cada material (PLA, PETG, etc.) con soporte para el filtro temporal global.
+*   **[Completado]** Catálogo de Fallos en Mermas (Idea 12). El botón rápido fue sustituido por un formulario estandarizado de reporte de Scrap.
+*   **[Completado]** Dashboard de Eficiencia de Operario (Idea 13). Implementado un selector de "Turno" (Operador Activo) que inyecta una firma de autor en cada registro (bueno o fallo). Adición de un Podio de Ranking que calcula el porcentaje de efectividad de cada empleado en el Dashboard Analítico.
+*   **[Completado]** Calculador de Longitud vs Peso (Idea 18). Integración de una herramienta conversora (Metros a Gramos) con diccionario de densidades por material en la creación/edición de órdenes.
+*   **[Completado]** Alerta de Bobina Incompatible (Idea 20). Prevención de errores humanos al impedir asignar una orden que requiere un material específico (ej. TPU) a una impresora que tiene cargado un material distinto (ej. PLA).
+*   **[Completado]** Etapas de Post-Procesado en Órdenes (Idea 22).
+*   **[Completado]** Filtro Modo "Noche" / Night Shift (Idea 26). Inclusión de botón de filtro inteligente que aísla visualmente las órdenes cuyas piezas toman más de 8 horas, ideal para dejarlas imprimiendo durante la noche y maximizar la eficiencia de la granja.
+*   **[Completado]** Notificaciones Push WhatsApp/Telegram (Idea 27).
+*   **[Descartado]** Modo "Tablet Kiosko" (Idea 28). Desactivado a petición del usuario.
+*   **[Completado]** Recompensas Gamificadas (Idea 29). Sistema de insignias en Dashboard de Estadísticas.
+*   **[Completado]** Historial Fotográfico de Mermas (Idea 30). Integración con la cámara del dispositivo móvil e inyección física de archivos al servidor (`/public/uploads`) al reportar un fallo en la máquina.
+*   **[Completado]** Filtros Avanzados de Vistas 3D (Idea 31). Inclusión de motor de filtros multicriterio (por fechas, por estados activos/inactivos y disponibilidad de materiales) aplicados tanto al control de órdenes como al de impresoras y bobinas.
+*   **[Completado]** Ciclo de Secado de Materiales / Smart Weather (Idea 28). Calculadora dinámica de tiempos de secado de filamento interconectada mediante geolocalización a la API satelital Open-Meteo para ajustar inteligentemente las horas de deshidratación según la humedad ambiental.
+*   **[En Progreso]** Automatización de Secado en Inventario (Evolución Idea 28). Implementación de indicador visual (icono) en el inventario de bobinas para materiales higroscópicos, con Tooltip interactivo de instrucciones de secado, y consulta automática del clima cada 12 horas guardando la ubicación en base de datos.
+*   **[Completado]** Sincronización Server-Side Farm3D (Hotfix). Se eliminó el middleware `persist` de `useFarm3D` y `useCadVault` que estaba causando sobrescrituras destructivas en MongoDB (Race Condition) al abrir navegadores nuevos. Ahora la flota y el inventario de bobinas son estables en la nube.
+
+## Siguientes Pasos: Fase 9 - Escalabilidad de Manufactura 3D
+*   **[Completado]** Bóveda de Archivos CAD y G-Code (Idea 24 & 32). Gestor completo con visor WebGL.
+*   **[En Progreso]** Evolución de la Bóveda CAD a "Explorador de Archivos". Implementación de jerarquía de carpetas (`CadFolder`), vista de lista detallada, selección múltiple y menús contextuales para mover y organizar modelos 3D y G-Codes dentro de cada proyecto.
+*   **[Completado]** Layout Isométrico 3D de la Granja (Idea 9). Mapa 3D interactivo con zoom, paneo, gizmos de rotación y acomodo (Drag & Drop), soporte de muros, puertas y visualización de impresoras en estantes multinivel.
+*   **[Completado]** Órdenes Multi-Parte y Multi-Instancia (Idea 11). Integración del multiplicador "Piezas por Cama" para registrar camas enteras simultáneamente descontando el material proporcional, y campo "Grupo de Ensamble" para vincular piezas de un mismo proyecto (Padre-Hijo).
+*   **[Completado]** Motor de Rotación 3D del Layout. Soporte para orientar impresoras y elementos arquitectónicos en 4 direcciones (0°, 90°, 180°, 270°) mediante menú de control contextual y un botón circular in-situ en el Gizmo de movimiento respetando la iluminación proyectada original.
+*   **[Completado]** Modo Constructor Isométrico. Rediseño del sistema de decoración para permitir dibujar paredes de un solo bloque continuo (Punto A al Punto B) con previsualización fantasma (Ghost Preview) y alineación perfecta a la cuadrícula, eliminando segmentación y optimizando el rendimiento web.
+*   **[Completado]** Sistema Anticolisiones Drag & Drop 3D. Durante el arrastre de impresoras o elementos decorativos, el resto de la granja se vuelve semi-transparente y permeable al ratón, garantizando un posicionamiento preciso y libre de bloqueos geométricos.
+*   **[Descartado]** Integración Hardware Raise3D Pro3 (Idea 15). Cancelado debido a la política de ecosistema cerrado y bloqueo corporativo de APIs (Tokens Enterprise).
+*   **[En Progreso]** Slicer Integrado / G-Code Parser (Idea 8). Implementación de lector nativo de archivos `.gcode` para extraer tiempo estimado (ETA), consumo de gramos y material, sustituyendo la dependencia a APIs externas y estableciendo la base del Gemelo Digital Predictivo.
+*   **[Completado] Sinergia CAD-Granja:** Vinculación directa de Proyectos de la Bóveda CAD hacia las Órdenes de Producción (Midas 3D). Implementación de un Combobox (Buscador Inteligente) que auto-rellena datos, y un modal de "Archivos de Fabricación" inyectado en el Dashboard del operador con previsualización WebGL in-situ.
+*   **[Completado] Lista de Materiales (BOM) en Órdenes:** Integración del campo "Material Predeterminado" en los proyectos CAD. Al vincularlos a una orden de producción, el material se auto-rellena. Además, los "Accesorios" vinculados desde la Librería se muestran segregados como una "Lista de Materiales (BOM)" en el panel del operador.
+*   **[Completado] Archivo Asignado a Impresora:** Selector de "Archivo/Modelo" directamente en la tarjeta de la impresora para elegir el G-Code o STL específico del proyecto. Bloqueo estricto del material en el selector de bobinas cuando la orden requiere uno en específico.
+*   **[Completado] Selector de Bobinas Inteligente:** Implementación de reglas estrictas en la selección de bobinas por impresora. El selector filtra por material predeterminado del CAD, bloquea bobinas asignadas a otras máquinas e informa gráficamente los gramos restantes y el ShortID para una trazabilidad perfecta.
+*   **[Completado] Exclusión de Accesorios en Producción:** Bloqueo de la contabilización de piezas cuando la impresora tiene asignado un archivo tipo "Accesorio Vinculado", dado que estos no son indispensables para completar la meta del proyecto. Se incluye un botón especial para "Registrar Accesorio" que descuenta el material de la bobina sin alterar la meta de la orden padre.
+*   **[Completado] Metadatos de Producción en Bóveda CAD:** Ampliar el modelo de archivos en la Bóveda CAD para incluir "Peso en gramos (Material Requerido)" y "Tiempo Estimado". Al subir una nueva versión de un archivo, los campos se autocompletan con los valores de la versión anterior heredando las propiedades, y se muestran de forma estética bajo el nombre de los archivos en el explorador.
+
 ## Backlog / En Espera:
 
 ### Fase 3: Notificaciones e Integraciones Externas (Pausado indefinidamente)
